@@ -6,6 +6,10 @@ import {
   IconMoodHappy,
   IconTypography,
   IconUserPlus,
+  IconSortDescending2,
+  IconFileInvoice,
+  IconUsersGroup,
+  IconUserCog ,
 } from "@tabler/icons-react";
 
 import { uniqueId } from "lodash";
@@ -13,7 +17,7 @@ import { uniqueId } from "lodash";
 const Menuitems = [
   {
     navlabel: true,
-    subheader: "Home",
+    subheader: "Main",
   },
 
   {
@@ -24,19 +28,58 @@ const Menuitems = [
   },
   {
     navlabel: true,
-    subheader: "Utilities",
+    subheader: "Inventory",
   },
   {
     id: uniqueId(),
-    title: "Typography",
+    title: "Gate In",
     icon: IconTypography,
-    href: "/utilities/typography",
+    href: "/utilities/gatein",
   },
   {
     id: uniqueId(),
-    title: "Shadow",
+    title: "Gate Out",
+    icon:  IconSortDescending2,
+    href: "/utilities/gateout",
+  },
+  {
+    id: uniqueId(),
+    title: "Invoices",
+    icon: IconFileInvoice,
+    href: "/utilities/invoices",
+  },
+  //changings
+  {
+    navlabel: true,
+    subheader: "Sale",
+  },
+  {
+    id: uniqueId(),
+    title: "Sale invoice",
+    icon: IconFileInvoice,
+    href: "/utilities/saleinvoices",
+  },
+  {
+    id: uniqueId(),
+    title: "Sale Returns",
     icon: IconCopy,
-    href: "/utilities/shadow",
+    href: "/utilities/salesreturn",
+  },
+  {
+    navlabel: true,
+    subheader: "Customer",
+  },
+  {
+    id: uniqueId(),
+    title: "Customers",
+    icon: IconUsersGroup,
+    href: "/utilities/customer",
+  },
+  {
+    id: uniqueId(),
+    title: "Vendors",
+    icon: IconUserCog ,
+    href: "/utilities/vendor",
   },
   {
     navlabel: true,
