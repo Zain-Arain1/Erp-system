@@ -1,5 +1,3 @@
-/* The above code is a TypeScript React component that creates a page for managing gate entries related
-to raw materials. Here is a summary of what the code does: */
 "use client";
 import React, { useState, useEffect } from "react";
 import {
@@ -9,7 +7,6 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TablePagination,
   TableRow,
   Button,
   Typography,
@@ -18,114 +15,121 @@ import {
   MenuItem,
   useMediaQuery,
   IconButton,
-  Tooltip,
   Skeleton,
   Box,
   CircularProgress,
   Snackbar,
   Alert,
-  Avatar,
   Stack,
+  TablePagination,
+  Link,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Select,
+  InputLabel,
+  FormControl,
+  Divider,
+  Grid,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
-import Product from "./product";
-import { 
-  getGateEntries, 
-  createGateEntry, 
-  updateGateEntry, 
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
+import {
+  getGateEntries,
+  createGateEntry,
+  updateGateEntry,
   deleteGateEntry,
-  GateEntry 
+  addPayment,
+  GateEntry,
+  Payment,
+  Item
 } from '@/services/gatein';
+import { useVendorContext } from "@/app/(DashboardLayout)/utilities/context/vendorContext";
 
 interface Column {
-  id: "invoice" | "customer" | "units" | "quantity" | "purchaseprice" | "total" | "date" | "status" | "vendor" | "action";
+  id: "invoiceNumber" | "vendor" | "totalAmount" | "paymentStatus" | "date" | "action";
   label: string;
   minWidth?: number;
   align?: "right" | "left" | "center";
   format?: (value: number) => string;
 }
 
-interface Data {
-  _id?: string;
-  invoice: number;
-  customer: string;
-  total: number;
-  units: string;
-  quantity: number;
-  purchaseprice: number;
-  paymentStatus: "Paid" | "Overdue" | "Pending";
-  date: string;
-  vendor: string;
-}
-
 const columns: Column[] = [
-  { id: "invoice", label: "#", minWidth: 40, align: "left" },
-  { id: "customer", label: "Item", minWidth: 100, align: "left" },
-  { id: "units", label: "Units", minWidth: 70, align: "left" },
+  { id: "invoiceNumber", label: "Invoice #", minWidth: 100, align: "left" },
+  { id: "vendor", label: "Vendor", minWidth: 150, align: "left" },
   {
-    id: "quantity",
-    label: "Quantity",
-    minWidth: 100,
-    align: "left",
-    format: (value: number) => value.toLocaleString("en-US"),
-  },
-  {
-    id: "purchaseprice",
-    label: "Purchase Price",
-    minWidth: 100,
-    align: "left",
-    format: (value: number) => value.toFixed(2),
-  },
-  {
-    id: "total",
-    label: "Total",
+    id: "totalAmount",
+    label: "Total Amount",
     minWidth: 120,
-    align: "left",
-    format: (value: number) => value.toLocaleString("en-US"),
+    align: "right",
+    format: (value: number) => (value || 0).toLocaleString("en-US", { minimumFractionDigits: 2 }),
   },
+  { id: "paymentStatus", label: "Status", minWidth: 100, align: "center" },
   { id: "date", label: "Date", minWidth: 120, align: "left" },
-  { id: "vendor", label: "Vendors", minWidth: 120, align: "left" },
-  { id: "status", label: "Status", minWidth: 100, align: "left" },
-  { id: "action", label: "Action", minWidth: 100, align: "center" },
+  { id: "action", label: "Actions", minWidth: 100, align: "center" },
 ];
 
-const Page = () => {
-  const [rows, setRows] = useState<Data[]>([]);
+const GateInPage = () => {
+  const [rows, setRows] = useState<GateEntry[]>([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage] = useState(10);
   const [showForm, setShowForm] = useState(false);
-  const [editRow, setEditRow] = useState<Data | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<GateEntry | null>(null);
+  const [editRow, setEditRow] = useState<GateEntry | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedRow, setSelectedRow] = useState<Data | null>(null);
+  const [selectedRow, setSelectedRow] = useState<GateEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
     severity: "success" as "success" | "error" | "warning" | "info",
   });
+  const [newPayment, setNewPayment] = useState<Payment>({
+    amount: 0,
+    date: new Date().toISOString().split('T')[0],
+    method: "Cash",
+    reference: ""
+  });
 
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
+  const { vendors } = useVendorContext();
 
-  // Fetch data from backend
+  // Helper function to get vendor name
+  const getVendorName = (vendorId: string) => {
+    const vendor = vendors.find(v => v.id === vendorId);
+    return vendor ? vendor.name : vendorId;
+  };
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      const data = await getGateEntries();
+      const validatedData = data.map(entry => ({
+        ...entry,
+        totalAmount: entry.totalAmount || 0,
+        items: entry.items || [],
+        payments: entry.payments || []
+      }));
+      setRows(validatedData);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to load data",
+        severity: "error",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        const data = await getGateEntries();
-        setRows(data);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setSnackbar({
-          open: true,
-          message: "Failed to load data",
-          severity: "error",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchData();
   }, []);
 
@@ -134,33 +138,86 @@ const Page = () => {
   };
 
   const handleFormSubmit = async (
-    customer: string,
-    total: number,
-    units: string,
-    quantity: number,
-    purchaseprice: number,
-    paymentStatus: "Paid" | "Overdue" | "Pending",
-    date: string,
-    vendor: string
+    items: Item[],
+    vendorId: string,
+    paymentStatus: "Paid" | "Partial" | "Pending"
   ) => {
-    const entryData = {
-      customer,
-      total,
-      units,
-      quantity,
-      purchaseprice,
-      paymentStatus,
-      date,
-      vendor,
-    };
+    // ===== VALIDATION SECTION =====
+    const validationErrors: string[] = [];
+
+    // Vendor validation
+    if (!vendorId) {
+      validationErrors.push("• Please select a vendor");
+    }
+
+    // Items validation
+    items.forEach((item, index) => {
+      if (!item.name.trim()) {
+        validationErrors.push(`• Item ${index + 1}: Name is required`);
+      }
+      if (!item.units.trim()) {
+        validationErrors.push(`• Item ${index + 1}: Unit of measurement is required`);
+      }
+      if (item.quantity <= 0 || isNaN(item.quantity)) {
+        validationErrors.push(`• Item ${index + 1}: Quantity must be greater than 0`);
+      }
+      if (item.purchasePrice <= 0 || isNaN(item.purchasePrice)) {
+        validationErrors.push(`• Item ${index + 1}: Price must be greater than 0`);
+      }
+      if (isNaN(item.total) || item.total < 0) {
+        validationErrors.push(`• Item ${index + 1}: Invalid total amount`);
+      }
+    });
+
+    if (validationErrors.length > 0) {
+      setSnackbar({
+        open: true,
+        message: `Please fix the following errors:\n${validationErrors.join('\n')}`,
+        severity: "error",
+
+      });
+      return;
+    }
+    // ===== END VALIDATION =====
+
+    const vendor = vendors.find(v => v.id === vendorId);
+    if (!vendor) {
+      setSnackbar({
+        open: true,
+        message: "Selected vendor not found. Please refresh the vendor list.",
+        severity: "error",
+      });
+      return;
+    }
+
+    // Ensure all numeric fields are properly formatted
+    const validatedItems = items.map(item => ({
+      ...item,
+      quantity: Number(item.quantity),
+      purchasePrice: Number(item.purchasePrice),
+      total: Number(item.total.toFixed(2)) // Ensure 2 decimal places
+    }));
+
+    const totalAmount = validatedItems.reduce((sum, item) => sum + item.total, 0);
 
     try {
+      const entryData = {
+        items: validatedItems,
+        vendor: vendor.name,
+        vendorId: vendor.id,
+        paymentStatus,
+        totalAmount,
+        date: new Date().toISOString(),
+        payments: [],
+        invoiceNumber: 0 // Will be generated by backend
+      };
+
       if (editRow && editRow._id) {
         const updatedEntry = await updateGateEntry(editRow._id, entryData);
         setRows(rows.map(row => row._id === editRow._id ? updatedEntry : row));
         setSnackbar({
           open: true,
-          message: "Entry updated successfully!",
+          message: `Invoice #${updatedEntry.invoiceNumber} updated successfully!`,
           severity: "success",
         });
       } else {
@@ -168,28 +225,30 @@ const Page = () => {
         setRows([newEntry, ...rows]);
         setSnackbar({
           open: true,
-          message: "Entry created successfully!",
+          message: `New invoice #${newEntry.invoiceNumber} created successfully!`,
           severity: "success",
         });
       }
+
       setShowForm(false);
       setEditRow(null);
     } catch (error) {
-      console.error("Error saving data:", error);
+      console.error("Error saving invoice:", error);
       setSnackbar({
         open: true,
-        message: "Failed to save data",
+        message: error instanceof Error
+          ? `Save failed: ${error.message}`
+          : "Failed to save invoice due to an unknown error",
         severity: "error",
       });
     }
   };
-
   const handleFormCancel = () => {
     setShowForm(false);
     setEditRow(null);
   };
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, row: Data) => {
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, row: GateEntry) => {
     setAnchorEl(event.currentTarget);
     setSelectedRow(row);
   };
@@ -229,32 +288,58 @@ const Page = () => {
     handleMenuClose();
   };
 
+  const handleViewDetail = (entry: GateEntry) => {
+    setSelectedEntry(entry);
+    setShowDetail(true);
+  };
+
+  const handleCloseDetail = () => {
+    setShowDetail(false);
+    setSelectedEntry(null);
+    setNewPayment({
+      amount: 0,
+      date: new Date().toISOString().split('T')[0],
+      method: "Cash",
+      reference: ""
+    });
+  };
+
+  const handlePaymentSubmit = async () => {
+    if (!selectedEntry?._id || newPayment.amount <= 0) return;
+
+    try {
+      await addPayment(selectedEntry._id, {
+        ...newPayment,
+        amount: Number(newPayment.amount)
+      });
+      await fetchData();
+      setSnackbar({
+        open: true,
+        message: "Payment recorded successfully!",
+        severity: "success",
+      });
+      handleCloseDetail();
+    } catch (error) {
+      console.error("Error adding payment:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to record payment",
+        severity: "error",
+      });
+    }
+  };
+
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
   };
 
-  // Function to truncate long text and show tooltip
-  const renderCellContent = (value: string | number, column: Column) => {
-    const stringValue = typeof value === 'number' ? value.toString() : value;
-    const maxLength = column.minWidth ? column.minWidth / 10 : 15;
-    const shouldTruncate = stringValue.length > maxLength;
-    
-    return (
-      <Tooltip title={shouldTruncate ? stringValue : ''} arrow>
-        <Typography 
-          variant="body2" 
-          sx={{
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            maxWidth: `${column.minWidth}px`,
-            display: 'inline-block',
-          }}
-        >
-          {column.format && typeof value === 'number' ? column.format(value) : stringValue}
-        </Typography>
-      </Tooltip>
-    );
+  // Format date to Pakistan time
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-PK', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
   };
 
   // Loading skeleton for table rows
@@ -271,7 +356,7 @@ const Page = () => {
   };
 
   return (
-    <Box sx={{ 
+    <Box sx={{
       p: isSmallScreen ? 1 : 3,
       backgroundColor: theme.palette.background.default,
       minHeight: '100vh',
@@ -301,11 +386,399 @@ const Page = () => {
 
       {/* Form Dialog */}
       {showForm && (
-        <Product
-          onSubmit={handleFormSubmit}
-          onCancel={handleFormCancel}
-          initialData={editRow}
-        />
+        <Dialog open={true} onClose={handleFormCancel} maxWidth="md" fullWidth>
+          <DialogTitle>
+            <Typography variant="h5" component="div" align="center">
+              {editRow ? "Edit Invoice" : "Create New Invoice"}
+            </Typography>
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Vendor</InputLabel>
+                    <Select
+                      value={editRow?.vendor || ""}
+                      onChange={(e) => editRow && setEditRow({ ...editRow, vendor: e.target.value })}
+                      label="Vendor"
+                      required
+                    >
+                      {vendors.filter(v => v.status === "Active").map((vendor) => (
+                        <MenuItem key={vendor.id} value={vendor.id}>
+                          {vendor.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    Items
+                  </Typography>
+                  <TableContainer component={Paper}>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Item Name</TableCell>
+                          <TableCell>Units</TableCell>
+                          <TableCell>Quantity</TableCell>
+                          <TableCell>Price</TableCell>
+                          <TableCell>Total</TableCell>
+                          <TableCell>Action</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {editRow?.items?.map((item, index) => (
+                          <TableRow key={index}>
+                            <TableCell>
+                              <TextField
+                                fullWidth
+                                value={item.name}
+                                onChange={(e) => {
+                                  const newItems = [...editRow.items];
+                                  newItems[index].name = e.target.value;
+                                  setEditRow({ ...editRow, items: newItems });
+                                }}
+                                required
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                fullWidth
+                                value={item.units}
+                                onChange={(e) => {
+                                  const newItems = [...editRow.items];
+                                  newItems[index].units = e.target.value;
+                                  setEditRow({ ...editRow, items: newItems });
+                                }}
+                                required
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                fullWidth
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const newItems = [...editRow.items];
+                                  newItems[index].quantity = Number(e.target.value);
+                                  newItems[index].total = newItems[index].quantity * newItems[index].purchasePrice;
+                                  setEditRow({ ...editRow, items: newItems });
+                                }}
+                                required
+                                inputProps={{ min: 0 }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                fullWidth
+                                type="number"
+                                value={item.purchasePrice}
+                                onChange={(e) => {
+                                  const newItems = [...editRow.items];
+                                  newItems[index].purchasePrice = Number(e.target.value);
+                                  newItems[index].total = newItems[index].quantity * newItems[index].purchasePrice;
+                                  setEditRow({ ...editRow, items: newItems });
+                                }}
+                                required
+                                inputProps={{ min: 0 }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                fullWidth
+                                type="number"
+                                value={item.total.toFixed(2)}
+                                disabled
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <IconButton
+                                onClick={() => {
+                                  if (editRow.items.length > 1) {
+                                    const newItems = [...editRow.items];
+                                    newItems.splice(index, 1);
+                                    setEditRow({ ...editRow, items: newItems });
+                                  }
+                                }}
+                                disabled={editRow.items.length <= 1}
+                              >
+                                <DeleteIcon color={editRow.items.length <= 1 ? "disabled" : "error"} />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <Button
+                    startIcon={<AddIcon />}
+                    onClick={() => {
+                      setEditRow({
+                        ...editRow!,
+                        items: [...editRow!.items, { name: "", units: "", quantity: 0, purchasePrice: 0, total: 0 }]
+                      });
+                    }}
+                    sx={{ mt: 1 }}
+                  >
+                    Add Item
+                  </Button>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Total Amount"
+                    type="number"
+                    value={editRow?.items.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
+                    disabled
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Payment Status</InputLabel>
+                    <Select
+                      value={editRow?.paymentStatus || "Pending"}
+                      onChange={(e) => editRow && setEditRow({
+                        ...editRow,
+                        paymentStatus: e.target.value as "Paid" | "Partial" | "Pending"
+                      })}
+                      label="Payment Status"
+                      required
+                    >
+                      <MenuItem value="Paid">Paid</MenuItem>
+                      <MenuItem value="Partial">Partial</MenuItem>
+                      <MenuItem value="Pending">Pending</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleFormCancel} color="secondary">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => editRow && handleFormSubmit(editRow.items, editRow.vendor, editRow.paymentStatus)}
+              color="primary"
+              variant="contained"
+            >
+              {editRow ? "Update Invoice" : "Create Invoice"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {/* Invoice Detail Dialog */}
+      {showDetail && selectedEntry && (
+        <Dialog open={showDetail} onClose={handleCloseDetail} maxWidth="md" fullWidth>
+          <DialogTitle>
+            <Typography variant="h5">Invoice #{selectedEntry.invoiceNumber}</Typography>
+            <Typography variant="subtitle1" color="textSecondary">
+              Vendor: {selectedEntry.vendor}
+            </Typography>
+            <Typography variant="subtitle1" color="textSecondary">
+              Date: {formatDate(selectedEntry.date)}
+            </Typography>
+            <Chip
+              label={selectedEntry.paymentStatus}
+              color={
+                selectedEntry.paymentStatus === 'Paid'
+                  ? "success"
+                  : selectedEntry.paymentStatus === 'Partial'
+                    ? "warning"
+                    : "error"
+              }
+              sx={{ mt: 1 }}
+            />
+          </DialogTitle>
+
+          <DialogContent dividers>
+            <Box mb={3}>
+              <Typography variant="h6" gutterBottom>
+                Items
+              </Typography>
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Item</TableCell>
+                      <TableCell align="right">Quantity</TableCell>
+                      <TableCell align="right">Unit</TableCell>
+                      <TableCell align="right">Price</TableCell>
+                      <TableCell align="right">Total</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {selectedEntry.items.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell align="right">{item.quantity}</TableCell>
+                        <TableCell align="right">{item.units}</TableCell>
+                        <TableCell align="right">{item.purchasePrice.toFixed(2)}</TableCell>
+                        <TableCell align="right">{item.total.toFixed(2)}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow>
+                      <TableCell colSpan={4} align="right">
+                        <Typography fontWeight="bold">Grand Total:</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography fontWeight="bold">
+                          {selectedEntry.totalAmount.toFixed(2)}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+
+            <Box mb={3}>
+              <Typography variant="h6" gutterBottom>
+                Payment Summary
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <Paper sx={{ p: 2, backgroundColor: theme.palette.grey[100] }}>
+                    <Typography variant="subtitle2">Total Amount</Typography>
+                    <Typography variant="h6">{selectedEntry.totalAmount.toFixed(2)}</Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Paper sx={{ p: 2, backgroundColor: theme.palette.grey[100] }}>
+                    <Typography variant="subtitle2">Total Paid</Typography>
+                    <Typography variant="h6">
+                      {(selectedEntry.payments?.reduce((sum, p) => sum + p.amount, 0) || 0).toFixed(2)}
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Paper sx={{
+                    p: 2,
+                    backgroundColor: (selectedEntry.totalAmount - (selectedEntry.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)) > 0
+                      ? theme.palette.error.light
+                      : theme.palette.success.light
+                  }}>
+                    <Typography variant="subtitle2">Balance</Typography>
+                    <Typography variant="h6">
+                      {(selectedEntry.totalAmount - (selectedEntry.payments?.reduce((sum, p) => sum + p.amount, 0) || 0)).toFixed(2)}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </Box>
+
+            {selectedEntry.payments?.length > 0 && (
+              <Box mb={3}>
+                <Typography variant="h6" gutterBottom>
+                  Payment History
+                </Typography>
+                <TableContainer component={Paper}>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Date</TableCell>
+                        <TableCell>Amount</TableCell>
+                        <TableCell>Method</TableCell>
+                        <TableCell>Reference</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {selectedEntry.payments.map((payment, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{formatDate(payment.date)}</TableCell>
+                          <TableCell>{payment.amount.toFixed(2)}</TableCell>
+                          <TableCell>{payment.method}</TableCell>
+                          <TableCell>{payment.reference || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
+
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Add New Payment
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Amount"
+                    type="number"
+                    value={newPayment.amount}
+                    onChange={(e) => setNewPayment({
+                      ...newPayment,
+                      amount: Number(e.target.value)
+                    })}
+                    inputProps={{ min: 0 }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Date"
+                    type="date"
+                    InputLabelProps={{ shrink: true }}
+                    value={newPayment.date}
+                    onChange={(e) => setNewPayment({
+                      ...newPayment,
+                      date: e.target.value
+                    })}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <FormControl fullWidth>
+                    <InputLabel>Method</InputLabel>
+                    <Select
+                      value={newPayment.method}
+                      onChange={(e) => setNewPayment({
+                        ...newPayment,
+                        method: e.target.value as "Cash" | "Bank Transfer" | "Cheque" | "Other"
+                      })}
+                      label="Method"
+                    >
+                      <MenuItem value="Cash">Cash</MenuItem>
+                      <MenuItem value="Bank Transfer">Bank Transfer</MenuItem>
+                      <MenuItem value="Cheque">Cheque</MenuItem>
+                      <MenuItem value="Other">Other</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    label="Reference"
+                    value={newPayment.reference}
+                    onChange={(e) => setNewPayment({
+                      ...newPayment,
+                      reference: e.target.value
+                    })}
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          </DialogContent>
+
+          <DialogActions>
+            <Button onClick={handleCloseDetail}>Close</Button>
+            <Button
+              onClick={handlePaymentSubmit}
+              variant="contained"
+              color="primary"
+              disabled={newPayment.amount <= 0}
+            >
+              Record Payment
+            </Button>
+          </DialogActions>
+        </Dialog>
       )}
 
       {/* Notification Snackbar */}
@@ -325,10 +798,10 @@ const Page = () => {
       </Snackbar>
 
       {/* Main Content */}
-      <Paper 
-        sx={{ 
-          width: "100%", 
-          overflow: "hidden", 
+      <Paper
+        sx={{
+          width: "100%",
+          overflow: "hidden",
           p: 3,
           boxShadow: 3,
           borderRadius: 2,
@@ -344,33 +817,46 @@ const Page = () => {
           flexDirection: isSmallScreen ? 'column' : 'row',
           gap: 2,
         }}>
-          <Typography 
-            variant={isSmallScreen ? "h5" : "h4"} 
-            sx={{ 
+          <Typography
+            variant={isSmallScreen ? "h5" : "h4"}
+            sx={{
               fontWeight: 700,
               color: theme.palette.text.primary,
             }}
           >
-            Raw Material
+            Raw Material Gate-In
           </Typography>
-          
-          <Button 
-            variant="contained" 
-            onClick={() => setShowForm(true)}
-            sx={{
-              px: 3,
-              py: 1,
-              borderRadius: '8px',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+
+          <Button
+            variant="contained"
+            onClick={() => {
+              setEditRow({
+                _id: '', // Add this if your type requires it
+                invoiceNumber: 0,
+                vendor: vendors.length > 0 ? vendors[0].id : "", // Default to first vendor
+                vendorId: vendors.length > 0 ? vendors[0].id : "",
+                items: [{
+                  name: "",
+                  units: "kg", // Default unit
+                  quantity: 1, // Default to 1 instead of 0
+                  purchasePrice: 0,
+                  total: 0
+                }],
+                totalAmount: 0,
+                paymentStatus: "Pending",
+                date: new Date().toISOString(),
+                payments: []
+              });
+              setShowForm(true);
             }}
           >
-            Add New Entry
+            Create New Invoice
           </Button>
         </Box>
 
         {/* Table */}
-        <TableContainer 
-          sx={{ 
+        <TableContainer
+          sx={{
             overflowX: "auto",
             borderRadius: '8px',
             border: `1px solid ${theme.palette.divider}`,
@@ -388,7 +874,6 @@ const Page = () => {
                       backgroundColor: theme.palette.primary.main,
                       color: theme.palette.common.white,
                       fontWeight: 600,
-                      display: isSmallScreen && (column.id === "units" || column.id === "purchaseprice") ? "none" : "table-cell",
                     }}
                   >
                     {column.label}
@@ -404,44 +889,77 @@ const Page = () => {
                 rows
                   .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                   .map((row) => (
-                    <TableRow hover key={row._id || row.invoice}>
+                    <TableRow hover key={row._id}>
                       {columns.map((column) => {
-                        const value = row[column.id as keyof Data];
+                        const value = row[column.id as keyof GateEntry];
                         return (
                           <TableCell
                             key={column.id}
                             align={column.align}
-                            sx={{
-                              display: isSmallScreen && (column.id === "units" || column.id === "purchaseprice") ? "none" : "table-cell",
-                            }}
                           >
-                            {column.id === "status" ? (
-                              <Chip
-                                label={row.paymentStatus}
-                                color={
-                                  row.paymentStatus === "Paid"
-                                    ? "success"
-                                    : row.paymentStatus === "Pending"
-                                    ? "warning"
-                                    : "error"
-                                }
-                                size="small"
-                              />
-                            ) : column.id === "action" ? (
-                              <IconButton 
-                                onClick={(event) => handleMenuClick(event, row)}
-                                sx={{
-                                  color: theme.palette.text.secondary,
-                                  '&:hover': {
-                                    color: theme.palette.primary.main,
-                                  },
-                                }}
-                              >
-                                <MoreVertIcon />
-                              </IconButton>
-                            ) : (
-                              renderCellContent(value as string | number, column)
-                            )}
+                            {(() => {
+                              if (column.id === "invoiceNumber") {
+                                return (
+                                  <Link
+                                    component="button"
+                                    onClick={() => handleViewDetail(row)}
+                                    sx={{
+                                      color: theme.palette.primary.main,
+                                      textDecoration: 'none',
+                                      '&:hover': {
+                                        textDecoration: 'underline',
+                                      },
+                                    }}
+                                  >
+                                    #{value as string}
+                                  </Link>
+                                );
+                              }
+
+                              if (column.id === "paymentStatus") {
+                                return (
+                                  <Chip
+                                    label={row.paymentStatus}
+                                    color={
+                                      row.paymentStatus === "Paid"
+                                        ? "success"
+                                        : row.paymentStatus === "Partial"
+                                          ? "warning"
+                                          : "error"
+                                    }
+                                    size="small"
+                                  />
+                                );
+                              }
+
+                              if (column.id === "date") {
+                                return formatDate(value as string);
+                              }
+
+                              if (column.id === "totalAmount") {
+                                const amount = value as number || 0;
+                                return column.format ? column.format(amount) : amount.toLocaleString();
+                              }
+
+                              if (column.id === "action") {
+                                return (
+                                  <IconButton
+                                    onClick={(event) => handleMenuClick(event, row)}
+                                    sx={{
+                                      color: theme.palette.text.secondary,
+                                      '&:hover': {
+                                        color: theme.palette.primary.main,
+                                      },
+                                    }}
+                                  >
+                                    <MoreVertIcon />
+                                  </IconButton>
+                                );
+                              }
+
+                              // Default case - ensure it's a string
+                              return value as string;
+                            })()}
                           </TableCell>
                         );
                       })}
@@ -451,7 +969,7 @@ const Page = () => {
                 <TableRow>
                   <TableCell colSpan={columns.length} align="center" sx={{ py: 4 }}>
                     <Typography variant="body1" color="textSecondary">
-                      No data available
+                      No invoices available
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -497,6 +1015,7 @@ const Page = () => {
         }}
       >
         <MenuItem onClick={handleEdit}>Edit</MenuItem>
+        <MenuItem onClick={() => selectedRow && handleViewDetail(selectedRow)}>View Details</MenuItem>
         <MenuItem onClick={handleDelete} sx={{ color: theme.palette.error.main }}>
           Delete
         </MenuItem>
@@ -505,4 +1024,4 @@ const Page = () => {
   );
 };
 
-export default Page;
+export default GateInPage;

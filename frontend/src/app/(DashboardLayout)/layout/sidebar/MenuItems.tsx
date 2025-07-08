@@ -116,6 +116,13 @@ const menuCategories: MenuCategory[] = [
         icon: IconUsersGroup,
         href: "/utilities/expenses",
         priority: true
+      },
+      {
+        id: uniqueId(),
+        title: "HRM",
+        icon: IconUsersGroup,
+        href: "/utilities/HRM",
+        priority: true
       }
     ]
   },

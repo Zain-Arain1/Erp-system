@@ -1,57 +1,120 @@
-/* This TypeScript code snippet is defining functions to interact with a backend API for managing gate
-entries. Here's a breakdown of what each part of the code is doing: */
 import axios from 'axios';
 
-// Define TypeScript interfaces for your data
-export interface GateEntry {
-  _id?: string;
-  invoice: number;
-  customer: string;
-  units: string;
-  quantity: number;
-  purchaseprice: number;
-  total: number;
-  paymentStatus: 'Paid' | 'Overdue' | 'Pending';
+export interface Payment {
+  amount: number;
   date: string;
-  vendor: string;
+  method: 'Cash' | 'Bank Transfer' | 'Cheque' | 'Other';
+  reference?: string;
 }
 
-const API_BASE_URL = 'http://localhost:5000/api/gate-in'; // Adjust if needed
+export interface Item {
+  name: string;
+  units: string;
+  quantity: number;
+  purchasePrice: number;
+  total: number;
+}
 
-// Fetch all gate entries
+export interface GateEntry {
+  _id?: string;
+  invoiceNumber: number;
+  items: Item[];
+  vendor: string;
+  vendorId: string;
+  totalAmount: number;
+  paymentStatus: 'Paid' | 'Partial' | 'Pending';
+  date: string;
+  payments: Payment[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/gate-in';
+
 export const getGateEntries = async (): Promise<GateEntry[]> => {
-  const response = await axios.get<GateEntry[]>(API_BASE_URL);
-  return response.data;
-};
-
-// Create a new gate entry
-export const createGateEntry = async (entryData: Omit<GateEntry, '_id' | 'invoice'>): Promise<GateEntry> => {
   try {
-    const response = await axios.post<GateEntry>(API_BASE_URL, entryData);
+    const response = await axios.get<GateEntry[]>(API_BASE_URL);
     return response.data;
   } catch (error) {
-    console.error('Error creating gate entry:', error);
-    throw error;
+    throw new Error('Failed to fetch gate entries');
   }
 };
 
-// Update a gate entry
-export const updateGateEntry = async (id: string, entryData: Partial<GateEntry>): Promise<GateEntry> => {
+export const getGateEntry = async (id: string): Promise<GateEntry> => {
+  try {
+    const response = await axios.get<GateEntry>(`${API_BASE_URL}/${id}`);
+    return response.data;
+  } catch (error) {
+    throw new Error('Failed to fetch gate entry');
+  }
+};
+
+export const createGateEntry = async (
+  entryData: Omit<GateEntry, '_id' | 'createdAt' | 'updatedAt'>
+): Promise<GateEntry> => {
+  try {
+    // Add client-side validation
+    if (!entryData.vendor || !entryData.vendorId) {
+      throw new Error('Vendor information is required');
+    }
+    if (!entryData.items || entryData.items.length === 0) {
+      throw new Error('At least one item is required');
+    }
+
+    // Ensure invoiceNumber is not sent (let server generate it)
+    const { invoiceNumber, ...dataToSend } = entryData;
+
+    const response = await axios.post<GateEntry>(API_BASE_URL, dataToSend, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.status >= 200 && response.status < 300) {
+      return response.data;
+    }
+    throw new Error(`Server responded with status ${response.status}`);
+  } catch (error: any) {
+    console.error('API Error:', error.response?.data || error.message);
+    throw new Error(
+      error.response?.data?.message || 
+      error.message || 
+      'Failed to create gate entry. Please try again.'
+    );
+  }
+};
+
+export const updateGateEntry = async (
+  id: string,
+  entryData: Partial<GateEntry>
+): Promise<GateEntry> => {
   try {
     const response = await axios.put<GateEntry>(`${API_BASE_URL}/${id}`, entryData);
     return response.data;
   } catch (error) {
-    console.error('Error updating gate entry:', error);
-    throw error;
+    throw new Error('Failed to update gate entry');
   }
 };
 
-// Delete a gate entry
+export const addPayment = async (
+  id: string,
+  paymentData: Payment
+): Promise<GateEntry> => {
+  try {
+    const response = await axios.post<GateEntry>(
+      `${API_BASE_URL}/${id}/payments`,
+      paymentData
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error('Failed to add payment');
+  }
+};
+
 export const deleteGateEntry = async (id: string): Promise<void> => {
   try {
     await axios.delete(`${API_BASE_URL}/${id}`);
   } catch (error) {
-    console.error('Error deleting gate entry:', error);
-    throw error;
+    throw new Error('Failed to delete gate entry');
   }
 };

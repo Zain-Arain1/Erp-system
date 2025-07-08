@@ -5,6 +5,7 @@ import Header from "@/app/(DashboardLayout)/layout/header/Header";
 import Sidebar from "@/app/(DashboardLayout)/layout/sidebar/Sidebar";
 import { InvoiceProvider } from "./utilities/context/InvoiceContext";
 import { CustomerProvider } from "./utilities/context/CustomerContext";
+import { VendorProvider } from "./utilities/context/vendorContext";
 
 const MainWrapper = styled("div")(() => ({
   display: "flex",
@@ -21,10 +22,6 @@ const PageWrapper = styled("div")(() => ({
   backgroundColor: "transparent",
 }));
 
-interface Props {
-  children: React.ReactNode;
-}
-
 export default function RootLayout({
   children,
 }: {
@@ -34,45 +31,46 @@ export default function RootLayout({
   const [isMobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
-    <CustomerProvider>
-      <InvoiceProvider>
-        <MainWrapper className="mainwrapper">
-          {/* ------------------------------------------- */}
-          {/* Sidebar */}
-          {/* ------------------------------------------- */}
-          <Sidebar
-            isSidebarOpen={isSidebarOpen}
-            isMobileSidebarOpen={isMobileSidebarOpen}
-            onSidebarClose={() => setMobileSidebarOpen(false)}
-          />
-          {/* ------------------------------------------- */}
-          {/* Main Wrapper */}
-          {/* ------------------------------------------- */}
-          <PageWrapper className="page-wrapper">
-            {/* ------------------------------------------- */}
-            {/* Header */}
-            {/* ------------------------------------------- */}
-            <Header toggleMobileSidebar={() => setMobileSidebarOpen(true)} />
-            {/* ------------------------------------------- */}
-            {/* PageContent */}
-            {/* ------------------------------------------- */}
-            <Container
-              sx={{
-                paddingTop: "20px",
-                maxWidth: "1200px",
-              }}
-            >
-              {/* ------------------------------------------- */}
-              {/* Page Route */}
-              {/* ------------------------------------------- */}
-              <Box sx={{ minHeight: "calc(100vh - 170px)" }}>{children}</Box>
-              {/* ------------------------------------------- */}
-              {/* End Page */}
-              {/* ------------------------------------------- */}
-            </Container>
-          </PageWrapper>
-        </MainWrapper>
-      </InvoiceProvider>
-    </CustomerProvider>
+    <MainWrapper className="mainwrapper">
+      {/* ------------------------------------------- */}
+      {/* Sidebar */}
+      {/* ------------------------------------------- */}
+      <Sidebar
+        isSidebarOpen={isSidebarOpen}
+        isMobileSidebarOpen={isMobileSidebarOpen}
+        onSidebarClose={() => setMobileSidebarOpen(false)}
+        // Remove ModalProps from here as it's not accepted by your Sidebar component
+      />
+      {/* ------------------------------------------- */}
+      {/* Main Wrapper */}
+      {/* ------------------------------------------- */}
+      <PageWrapper className="page-wrapper">
+        {/* ------------------------------------------- */}
+        {/* Header */}
+        {/* ------------------------------------------- */}
+        <Header toggleMobileSidebar={() => setMobileSidebarOpen(true)} />
+        {/* ------------------------------------------- */}
+        {/* PageContent */}
+        {/* ------------------------------------------- */}
+        <Container
+          maxWidth={false}
+          sx={{
+            paddingTop: "20px",
+            width: "100%",
+            px: { xs: 2, sm: 3, md: 4 },
+          }}
+        >
+          <Box sx={{ minHeight: "calc(100vh - 170px)" }}>
+            <CustomerProvider>
+              <InvoiceProvider>
+                <VendorProvider>
+                  {children}
+                </VendorProvider>
+              </InvoiceProvider>
+            </CustomerProvider>
+          </Box>
+        </Container>
+      </PageWrapper>
+    </MainWrapper>
   );
 }

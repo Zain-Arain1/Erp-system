@@ -72,12 +72,14 @@ const MSidebar = ({
               {/* ------------------------------------------- */}
               {/* Logo */}
               {/* ------------------------------------------- */}
-              <Logo img="/images/logos/dark-logo.svg" />
+              <img src="/images/logos/image.svg" />
+
+
               <Box>
                 {/* ------------------------------------------- */}
                 {/* Sidebar Items */}
                 {/* ------------------------------------------- */}
-                <SidebarItems toggleMobileSidebar={() => {}} /> 
+                <SidebarItems toggleMobileSidebar={() => { }} />
                 <Upgrade />
               </Box>
             </Sidebar >
@@ -117,7 +119,9 @@ const MSidebar = ({
           {/* ------------------------------------------- */}
           {/* Logo */}
           {/* ------------------------------------------- */}
-          <Logo img="/images/logos/dark-logo.svg" />
+          <img src="/images/logos/image.svg" />
+
+
           {/* ------------------------------------------- */}
           {/* Sidebar Items */}
           {/* ------------------------------------------- */}

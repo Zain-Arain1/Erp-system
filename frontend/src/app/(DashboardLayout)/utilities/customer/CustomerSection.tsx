@@ -1,5 +1,3 @@
-/* The above code is a TypeScript React component that represents a Customer Management section in a
-web application. Here is a summary of what the code is doing: */
 "use client";
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -95,10 +93,12 @@ const CustomerSection = () => {
   const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
 
   useEffect(() => {
-    if (customers.length > 0) {
+    // Set initial load to false after first render
+    const timer = setTimeout(() => {
       setIsInitialLoad(false);
-    }
-  }, [customers]);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Handle pagination
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -223,9 +223,11 @@ const CustomerSection = () => {
     }
     handleMenuClose();
   };
+
   const handleLedgerClick = (customer: Customer) => {
     router.push(`/utilities/customer/ledger/${customer.id}`);
   };
+
   const filteredCustomers = customers.filter((customer) => {
     const matchesSearch =
       customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -270,9 +272,8 @@ const CustomerSection = () => {
     setSortConfig({ key, direction });
   };
 
-  // Function to truncate long text and show tooltip
   const renderCellContent = (value: string, column: Column) => {
-    const maxLength = column.minWidth ? column.minWidth / 10 : 20; // Adjust based on column width
+    const maxLength = column.minWidth ? column.minWidth / 10 : 20;
     const shouldTruncate = value.length > maxLength;
     
     return (
@@ -293,7 +294,6 @@ const CustomerSection = () => {
     );
   };
 
-  // Loading skeleton for table rows
   const renderLoadingRows = () => {
     return Array.from({ length: rowsPerPage }).map((_, index) => (
       <TableRow key={`skeleton-${index}`}>
@@ -311,32 +311,7 @@ const CustomerSection = () => {
       p: isMobile ? 1 : 3,
       backgroundColor: theme.palette.background.default,
       minHeight: '100vh',
-      position: 'relative',
     }}>
-      {/* Loading overlay */}
-      {isInitialLoad && (
-        <Box sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: alpha(theme.palette.background.paper, 0.7),
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: theme.zIndex.modal,
-          borderRadius: '12px',
-        }}>
-          <Stack direction="column" alignItems="center" spacing={2}>
-            <CircularProgress size={60} thickness={4} />
-            <Typography variant="h6" color="textSecondary">
-              Loading customers...
-            </Typography>
-          </Stack>
-        </Box>
-      )}
-
       {/* Add/Edit Customer Form */}
       {showForm && (
         <AddCustomerForm
@@ -346,7 +321,7 @@ const CustomerSection = () => {
         />
       )}
 
-      {/* Beautiful Snackbar for notifications */}
+      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
@@ -403,250 +378,295 @@ const CustomerSection = () => {
         </Button>
       </Box>
 
-      {/* Search and Filter Section */}
-      <Paper sx={{
-        p: 2,
-        mb: 3,
-        borderRadius: '12px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-        backgroundColor: theme.palette.background.paper,
-      }}>
-        <Stack direction={isMobile ? 'column' : 'row'} spacing={2} alignItems="center">
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search customers..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <SearchIcon sx={{ 
-                  color: theme.palette.action.active,
-                  mr: 1,
-                }} />
-              ),
-              sx: {
-                borderRadius: '8px',
-                backgroundColor: theme.palette.background.paper,
-              }
-            }}
-            sx={{
-              flex: 1,
-              '& .MuiOutlinedInput-root': {
-                '& fieldset': {
-                  borderColor: alpha(theme.palette.primary.main, 0.3),
-                },
-                '&:hover fieldset': {
-                  borderColor: theme.palette.primary.main,
-                },
-              },
-            }}
-          />
+      {/* Main Content */}
+      {isInitialLoad ? (
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '300px',
+        }}>
+          <CircularProgress size={60} thickness={4} />
+        </Box>
+      ) : customers.length === 0 ? (
+        <Paper sx={{
+          p: 4,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          minHeight: '300px',
+          borderRadius: '12px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+          backgroundColor: theme.palette.background.paper,
+        }}>
+          <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: 600 }}>
+            No Customers Found
+          </Typography>
+          <Typography variant="body1" color="textSecondary" sx={{ mb: 3, maxWidth: '500px' }}>
+  You don&apos;t have any customers yet. Click the button below to add your first customer and get started.
+</Typography>
 
-          <Stack direction="row" spacing={2} sx={{ width: isMobile ? '100%' : 'auto' }}>
-            <FormControl sx={{ minWidth: 120 }}>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as "All" | "Active" | "Inactive")}
-                label="Status"
+          <Button
+            variant="contained"
+            onClick={() => setShowForm(true)}
+            startIcon={<AddIcon />}
+            size="large"
+            sx={{
+              bgcolor: theme.palette.primary.main,
+              '&:hover': {
+                bgcolor: theme.palette.primary.dark,
+              },
+              px: 4,
+              py: 1.5,
+              borderRadius: '8px',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            }}
+          >
+            Add New Customer
+          </Button>
+        </Paper>
+      ) : (
+        <>
+          {/* Search and Filter Section */}
+          <Paper sx={{
+            p: 2,
+            mb: 3,
+            borderRadius: '12px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+            backgroundColor: theme.palette.background.paper,
+          }}>
+            <Stack direction={isMobile ? 'column' : 'row'} spacing={2} alignItems="center">
+              <TextField
+                fullWidth
+                variant="outlined"
+                placeholder="Search customers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <SearchIcon sx={{ 
+                      color: theme.palette.action.active,
+                      mr: 1,
+                    }} />
+                  ),
+                  sx: {
+                    borderRadius: '8px',
+                    backgroundColor: theme.palette.background.paper,
+                  }
+                }}
                 sx={{
-                  borderRadius: '8px',
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: alpha(theme.palette.primary.main, 0.3),
+                  flex: 1,
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': {
+                      borderColor: alpha(theme.palette.primary.main, 0.3),
+                    },
+                    '&:hover fieldset': {
+                      borderColor: theme.palette.primary.main,
+                    },
                   },
                 }}
-              >
-                <MenuItem value="All">All Status</MenuItem>
-                <MenuItem value="Active">Active</MenuItem>
-                <MenuItem value="Inactive">Inactive</MenuItem>
-              </Select>
-            </FormControl>
+              />
 
-            <Tooltip title="Refresh data">
-              <IconButton
-                sx={{
-                  border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
-                  borderRadius: '8px',
-                  color: theme.palette.primary.main,
-                }}
-              >
-                <RefreshIcon />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        </Stack>
-      </Paper>
-
-      {/* Customer Table */}
-      <Paper sx={{
-        width: "100%",
-        overflow: "hidden",
-        borderRadius: '12px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-        backgroundColor: theme.palette.background.paper,
-      }}>
-        <TableContainer>
-          <Table stickyHeader aria-label="customer table">
-            <TableHead>
-              <TableRow>
-                {columns.map((column) => (
-                  <TableCell
-                    key={column.id}
-                    align={column.align}
+              <Stack direction="row" spacing={2} sx={{ width: isMobile ? '100%' : 'auto' }}>
+                <FormControl sx={{ minWidth: 120 }}>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as "All" | "Active" | "Inactive")}
+                    label="Status"
                     sx={{
-                      minWidth: column.minWidth,
-                      backgroundColor: theme.palette.primary.main,
-                      color: theme.palette.common.white,
-                      fontWeight: 600,
-                      fontSize: '0.875rem',
-                      '&:hover': column.sortable ? {
-                        backgroundColor: alpha(theme.palette.primary.dark, 0.9),
-                        cursor: 'pointer',
-                      } : {},
+                      borderRadius: '8px',
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: alpha(theme.palette.primary.main, 0.3),
+                      },
                     }}
-                    onClick={() => column.sortable && column.id !== 'number' && handleSort(column.id as keyof Customer)}
                   >
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <span>{column.label}</span>
-                      {sortConfig?.key === column.id && (
-                        <span style={{ fontSize: '0.75rem' }}>
-                          {sortConfig.direction === "asc" ? "↑" : "↓"}
-                        </span>
-                      )}
-                    </Stack>
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
+                    <MenuItem value="All">All Status</MenuItem>
+                    <MenuItem value="Active">Active</MenuItem>
+                    <MenuItem value="Inactive">Inactive</MenuItem>
+                  </Select>
+                </FormControl>
 
-            <TableBody>
-              {isLoading ? (
-                renderLoadingRows()
-              ) : sortedCustomers.length > 0 ? (
-                sortedCustomers
-                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                  .map((customer, index) => (
-                    <TableRow 
-                      hover 
-                      key={customer.id}
-                      sx={{
-                        '&:nth-of-type(even)': {
-                          backgroundColor: alpha(theme.palette.action.hover, 0.05),
-                        },
-                        '&:hover': {
-                          backgroundColor: alpha(theme.palette.primary.light, 0.1),
-                        },
-                      }}
-                    >
-                      {columns.map((column) => {
-                        const value = customer[column.id as keyof Customer];
-                        return (
-                          <TableCell 
-                            key={column.id} 
-                            align={column.align}
-                            sx={{
-                              borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-                              py: 2,
-                            }}
-                          >
-                            {column.id === "number" ? (
-                              <Typography variant="body2">
-                                {sortedCustomers.length - (page * rowsPerPage + index)}
-                              </Typography>
-                            ) : column.id === "name" ? (
-                              <Stack direction="row" alignItems="center" spacing={1.5}>
-                                <Avatar sx={{ 
-                                  width: 32, 
-                                  height: 32,
-                                  bgcolor: theme.palette.primary.main,
-                                  fontSize: '0.875rem',
-                                }}>
-                                  {customer.name.charAt(0).toUpperCase()}
-                                </Avatar>
-                                {renderCellContent(value as string, column)}
-                              </Stack>
-                            ) : column.id === "status" ? (
-                              <Chip
-                                label={value}
-                                color={value === "Active" ? "success" : "error"}
-                                size="small"
+                <Tooltip title="Refresh data">
+                  <IconButton
+                    sx={{
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.3)}`,
+                      borderRadius: '8px',
+                      color: theme.palette.primary.main,
+                    }}
+                  >
+                    <RefreshIcon />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+            </Stack>
+          </Paper>
+
+          {/* Customer Table */}
+          <Paper sx={{
+            width: "100%",
+            overflow: "hidden",
+            borderRadius: '12px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+            backgroundColor: theme.palette.background.paper,
+          }}>
+            <TableContainer>
+              <Table stickyHeader aria-label="customer table">
+                <TableHead>
+                  <TableRow>
+                    {columns.map((column) => (
+                      <TableCell
+                        key={column.id}
+                        align={column.align}
+                        sx={{
+                          minWidth: column.minWidth,
+                          backgroundColor: theme.palette.primary.main,
+                          color: theme.palette.common.white,
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          '&:hover': column.sortable ? {
+                            backgroundColor: alpha(theme.palette.primary.dark, 0.9),
+                            cursor: 'pointer',
+                          } : {},
+                        }}
+                        onClick={() => column.sortable && column.id !== 'number' && handleSort(column.id as keyof Customer)}
+                      >
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <span>{column.label}</span>
+                          {sortConfig?.key === column.id && (
+                            <span style={{ fontSize: '0.75rem' }}>
+                              {sortConfig.direction === "asc" ? "↑" : "↓"}
+                            </span>
+                          )}
+                        </Stack>
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+
+                <TableBody>
+                  {isLoading ? (
+                    renderLoadingRows()
+                  ) : (
+                    sortedCustomers
+                      .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                      .map((customer, index) => (
+                        <TableRow 
+                          hover 
+                          key={customer.id}
+                          sx={{
+                            '&:nth-of-type(even)': {
+                              backgroundColor: alpha(theme.palette.action.hover, 0.05),
+                            },
+                            '&:hover': {
+                              backgroundColor: alpha(theme.palette.primary.light, 0.1),
+                            },
+                          }}
+                        >
+                          {columns.map((column) => {
+                            const value = customer[column.id as keyof Customer];
+                            return (
+                              <TableCell 
+                                key={column.id} 
+                                align={column.align}
                                 sx={{
-                                  fontWeight: 500,
-                                  px: 0.5,
-                                  minWidth: 80,
-                                }}
-                              />
-                            ) : column.id === "action" ? (
-                              <IconButton 
-                                onClick={(e) => handleMenuClick(e, customer)}
-                                sx={{
-                                  color: theme.palette.text.secondary,
-                                  '&:hover': {
-                                    color: theme.palette.primary.main,
-                                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                                  },
+                                  borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                                  py: 2,
                                 }}
                               >
-                                <MoreVertIcon />
-                              </IconButton>
-                            ) : column.id === "ledger" ? (
-                              <Button
-                                variant="outlined"
-                                color="primary"
-                                size="small"
-                                onClick={() => handleLedgerClick(customer)}
-                                sx={{
-                                  textTransform: 'none',
-                                  borderRadius: '6px',
-                                  px: 2,
-                                  py: 0.5,
-                                  borderWidth: '1.5px',
-                                  '&:hover': {
-                                    borderWidth: '1.5px',
-                                  },
-                                }}
-                              >
-                                View Ledger
-                              </Button>
-                            ) : (
-                              renderCellContent(value as string, column)
-                            )}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={columns.length} align="center" sx={{ py: 4 }}>
-                    <Typography variant="body1" color="textSecondary">
-                      No customers found. Try adjusting your search or add a new customer.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                                {column.id === "number" ? (
+                                  <Typography variant="body2">
+                                    {sortedCustomers.length - (page * rowsPerPage + index)}
+                                  </Typography>
+                                ) : column.id === "name" ? (
+                                  <Stack direction="row" alignItems="center" spacing={1.5}>
+                                    <Avatar sx={{ 
+                                      width: 32, 
+                                      height: 32,
+                                      bgcolor: theme.palette.primary.main,
+                                      fontSize: '0.875rem',
+                                    }}>
+                                      {customer.name.charAt(0).toUpperCase()}
+                                    </Avatar>
+                                    {renderCellContent(value as string, column)}
+                                  </Stack>
+                                ) : column.id === "status" ? (
+                                  <Chip
+                                    label={value}
+                                    color={value === "Active" ? "success" : "error"}
+                                    size="small"
+                                    sx={{
+                                      fontWeight: 500,
+                                      px: 0.5,
+                                      minWidth: 80,
+                                    }}
+                                  />
+                                ) : column.id === "action" ? (
+                                  <IconButton 
+                                    onClick={(e) => handleMenuClick(e, customer)}
+                                    sx={{
+                                      color: theme.palette.text.secondary,
+                                      '&:hover': {
+                                        color: theme.palette.primary.main,
+                                        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                                      },
+                                    }}
+                                  >
+                                    <MoreVertIcon />
+                                  </IconButton>
+                                ) : column.id === "ledger" ? (
+                                  <Button
+                                    variant="outlined"
+                                    color="primary"
+                                    size="small"
+                                    onClick={() => handleLedgerClick(customer)}
+                                    sx={{
+                                      textTransform: 'none',
+                                      borderRadius: '6px',
+                                      px: 2,
+                                      py: 0.5,
+                                      borderWidth: '1.5px',
+                                      '&:hover': {
+                                        borderWidth: '1.5px',
+                                      },
+                                    }}
+                                  >
+                                    View Ledger
+                                  </Button>
+                                ) : (
+                                  renderCellContent(value as string, column)
+                                )}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
 
-        {/* Pagination */}
-        <TablePagination
-          rowsPerPageOptions={[10]}
-          component="div"
-          count={sortedCustomers.length}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          sx={{
-            borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
-            '& .MuiTablePagination-toolbar': {
-              padding: 2,
-            },
-          }}
-        />
-      </Paper>
+            {/* Pagination */}
+            <TablePagination
+              rowsPerPageOptions={[10]}
+              component="div"
+              count={sortedCustomers.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+              sx={{
+                borderTop: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                '& .MuiTablePagination-toolbar': {
+                  padding: 2,
+                },
+              }}
+            />
+          </Paper>
+        </>
+      )}
 
       {/* Action Menu */}
       <Menu

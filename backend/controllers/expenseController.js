@@ -3,7 +3,7 @@ const YearlyExpense = require('../models/yearlyExpenseModel');
 const { startOfMonth, endOfMonth, startOfYear, endOfYear } = require('date-fns');
 
 const handleError = (res, statusCode, message) => {
-  console.error(`Error: ${message}`);
+  // Removed console.error here as per your request
   if (res) return res.status(statusCode).json({ status: 'error', message });
   throw new Error(message);
 };
@@ -36,7 +36,6 @@ exports.getMonthlyExpenses = async (req, res) => {
       if (isNaN(start) || isNaN(end)) {
         return handleError(res, 400, 'Invalid date range');
       }
-      // Find all months that overlap the range
       const startYM = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
       const endYM = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}`;
       query.yearMonth = { $gte: startYM, $lte: endYM };
@@ -76,7 +75,6 @@ exports.transferDailyToMonthly = async (req, res) => {
       return handleError(res, 400, 'Date and valid entries are required');
     }
 
-    // Group and sum entries by date (should be only one date, but support multiple for robustness)
     const dateSums = {};
     for (const entry of entries) {
       if (!entry.amount || typeof entry.amount !== 'number' || entry.amount <= 0) {
@@ -94,7 +92,6 @@ exports.transferDailyToMonthly = async (req, res) => {
     for (const [dateStr, amount] of Object.entries(dateSums)) {
       const dateObj = new Date(dateStr);
       const yearMonth = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
-      // Upsert the month, then upsert the entry for the day
       upserts.push(
         MonthlyExpense.findOneAndUpdate(
           { yearMonth, "entries.date": dateObj },
@@ -104,7 +101,6 @@ exports.transferDailyToMonthly = async (req, res) => {
           { new: true }
         ).then(async (doc) => {
           if (!doc) {
-            // If not found, push new entry or create new month doc
             return MonthlyExpense.findOneAndUpdate(
               { yearMonth },
               { $push: { entries: { date: dateObj, amount } } },
@@ -117,7 +113,6 @@ exports.transferDailyToMonthly = async (req, res) => {
     }
     const results = await Promise.all(upserts);
 
-    // --- Always transfer to yearly for the affected month(s) ---
     let autoTransferMessages = [];
     for (const [dateStr] of Object.entries(dateSums)) {
       const dateObj = new Date(dateStr);
@@ -135,7 +130,6 @@ exports.transferDailyToMonthly = async (req, res) => {
   }
 };
 
-// Helper for auto-transfer: transfer monthly to yearly for a specific year/month
 exports.transferMonthlyToYearlyForMonth = async (year, month) => {
   const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
   const monthlyDoc = await MonthlyExpense.findOne({ yearMonth });
@@ -166,10 +160,9 @@ exports.transferMonthlyToYearly = async (req, res) => {
     const now = new Date();
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const year = lastMonth.getFullYear();
-    const month = lastMonth.getMonth() + 1; // 1-based
+    const month = lastMonth.getMonth() + 1;
     const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
 
-    // Find all monthly expenses for the previous month
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 0, 23, 59, 59, 999);
 
@@ -180,11 +173,9 @@ exports.transferMonthlyToYearly = async (req, res) => {
     if (!monthlyDocs || monthlyDocs.length === 0) {
       const message = `No expenses found for ${yearMonth}`;
       if (res) return res.status(200).json({ status: 'success', message });
-      console.log(message);
       return;
     }
 
-    // Sum all amounts for the month
     const monthTotal = monthlyDocs.reduce((sum, doc) => sum + doc.amount, 0);
 
     let yearlyDoc = await YearlyExpense.findOne({ year });
@@ -205,8 +196,6 @@ exports.transferMonthlyToYearly = async (req, res) => {
 
     if (res) {
       res.status(200).json({ status: 'success', message: `Transferred expenses for ${yearMonth} to yearly`, data: yearlyDoc });
-    } else {
-      console.log(`Transferred expenses for ${yearMonth} to yearly`);
     }
   } catch (err) {
     handleError(res, 500, `Failed to transfer monthly expenses: ${err.message}`);
