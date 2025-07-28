@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box, Typography, Tabs, Tab, Paper, Stack, Accordion,
-  AccordionSummary, AccordionDetails, Grid, Alert, useMediaQuery, Theme
+  AccordionSummary, AccordionDetails, Grid, Alert, useMediaQuery, Theme,
+  Snackbar, useTheme
 } from '@mui/material';
 import {
   People, AttachMoney, PersonSearch, CalendarToday, Search,
@@ -10,7 +11,6 @@ import {
 } from '@mui/icons-material';
 import { CircularProgress, TextField, FormControl, InputLabel, Select, MenuItem, InputAdornment, IconButton } from '@mui/material';
 import { format } from 'date-fns';
-import { useSnackbar } from 'notistack';
 import axios from 'axios';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers';
@@ -21,7 +21,6 @@ import SalaryRecordTab from './SalaryRecord';
 import AdvanceManagementTab from './AdvanceManagement';
 import AttendanceTrackingTab from './AttendanceTracking';
 import { Employee, SalaryRecord, Advance, Attendance } from './HRMTypes';
-
 
 const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/hrm`;
 
@@ -34,8 +33,8 @@ const api = axios.create({
 });
 
 const HRMPage = () => {
-  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery((theme: Theme) => theme.breakpoints.down('md'));
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [activeTab, setActiveTab] = useState(0);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [salaryRecords, setSalaryRecords] = useState<SalaryRecord[]>([]);
@@ -49,7 +48,7 @@ const HRMPage = () => {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
-  const [rowsPerPage] = useState(10);
+  const [rowsPerPage] = useState(isMobile ? 5 : 10);
   const [sortBy, setSortBy] = useState<string>('joinDate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [filters, setFilters] = useState({
@@ -59,7 +58,23 @@ const HRMPage = () => {
   });
   const [openHistoryDialog, setOpenHistoryDialog] = useState(false);
   const [selectedHistoryEmployee, setSelectedHistoryEmployee] = useState<string>('');
-  const { enqueueSnackbar } = useSnackbar();
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "error" as "error" | "warning" | "info" | "success",
+  });
+
+  const handleNotify = (message: string, severity: 'error' | 'warning' | 'info' | 'success') => {
+    setSnackbar({
+      open: true,
+      message,
+      severity
+    });
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar(prev => ({ ...prev, open: false }));
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -83,9 +98,8 @@ const HRMPage = () => {
           employeeAvatar: employee?.avatar,
           department: employee?.department || '-'
         };
-      })
-    );
-    
+      }));
+
       setAdvances(advRes.data);
       setAttendances(attRes.data.map((att: Attendance) => ({
         ...att,
@@ -94,14 +108,11 @@ const HRMPage = () => {
     } catch (error: any) {
       console.error('Error fetching data:', error);
       setError(error.response?.data?.message || 'Failed to fetch data');
-      enqueueSnackbar(error.response?.data?.message || 'Failed to fetch data', {
-        variant: 'error',
-        autoHideDuration: 3000
-      });
+      handleNotify(error.response?.data?.message || 'Failed to fetch data', 'error');
     } finally {
       setLoading(false);
     }
-  }, [currentMonth, currentYear, enqueueSnackbar]);
+  }, [currentMonth, currentYear]);
 
   useEffect(() => {
     fetchData();
@@ -148,11 +159,9 @@ const HRMPage = () => {
       link.click();
       document.body.removeChild(link);
 
-      enqueueSnackbar(`${type.charAt(0).toUpperCase() + type.slice(1)} exported successfully`, {
-        variant: 'success'
-      });
+      handleNotify(`${type.charAt(0).toUpperCase() + type.slice(1)} exported successfully`, 'success');
     } catch (error: any) {
-      enqueueSnackbar(`Failed to export ${type}`, { variant: 'error' });
+      handleNotify(`Failed to export ${type}`, 'error');
     }
   };
 
@@ -228,58 +237,123 @@ const HRMPage = () => {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <Box sx={{ p: isMobile ? 1 : 3, bgcolor: 'background.default' }}>
+      <Box sx={{ 
+        p: isMobile ? '4px' : 2, 
+        bgcolor: 'background.default',
+        maxWidth: '100vw',
+        overflowX: 'hidden'
+      }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
-        <Box sx={{ mb: 3 }}>
-          <Typography variant={isMobile ? "h5" : "h4"} component="h1" gutterBottom color="primary">
-            Human Resource Management
+        
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+        >
+          <Alert
+            onClose={handleCloseSnackbar}
+            severity={snackbar.severity}
+            sx={{
+              width: '100%',
+              boxShadow: (theme) => theme.shadows[4],
+              alignItems: 'center',
+              fontSize: '0.875rem',
+            }}
+          >
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
+
+        <Box sx={{ mb: 2 }}>
+          <Typography 
+            variant={isMobile ? "h6" : "h4"} 
+            component="h1" 
+            gutterBottom 
+            color="primary"
+            sx={{
+              fontSize: isMobile ? '1.25rem' : '2.125rem',
+              fontWeight: 500,
+              lineHeight: 1.2
+            }}
+          >
+            HR Management
           </Typography>
         </Box>
-        
+
         {/* Responsive Tabs */}
-        <Paper sx={{ mb: 3, borderRadius: 2, boxShadow: 3 }}>
+        <Paper sx={{ 
+          mb: 2, 
+          borderRadius: 1, 
+          boxShadow: 1,
+          overflow: 'hidden'
+        }}>
           <Tabs
             value={activeTab}
             onChange={handleTabChange}
             variant={isMobile ? "scrollable" : "fullWidth"}
             scrollButtons={isMobile ? "auto" : false}
             allowScrollButtonsMobile
-            sx={{ 
-              bgcolor: 'primary.light', 
-              borderRadius: 2,
+            sx={{
+              minHeight: isMobile ? '48px' : '64px',
               '& .MuiTab-root': {
                 minWidth: 'unset',
-                padding: isMobile ? '6px 12px' : '12px 16px',
-                fontSize: isMobile ? '0.75rem' : '0.875rem'
+                minHeight: isMobile ? '48px' : '64px',
+                padding: isMobile ? '6px 8px' : '12px 16px',
+                fontSize: isMobile ? '0.7rem' : '0.875rem',
+                '& svg': {
+                  fontSize: isMobile ? '1rem' : '1.25rem',
+                  marginBottom: isMobile ? '0' : '2px'
+                }
               }
             }}
           >
-            <Tab label={isMobile ? "Employees" : "Employees"} icon={<People fontSize={isMobile ? "small" : "medium"} />} iconPosition={isMobile ? "top" : "start"} />
-            <Tab label={isMobile ? "Salaries" : "Salary Records"} icon={<AttachMoney fontSize={isMobile ? "small" : "medium"} />} iconPosition={isMobile ? "top" : "start"} />
-            <Tab label={isMobile ? "Advances" : "Advance Management"} icon={<PersonSearch fontSize={isMobile ? "small" : "medium"} />} iconPosition={isMobile ? "top" : "start"} />
-            <Tab label={isMobile ? "Attendance" : "Attendance Tracking"} icon={<CalendarToday fontSize={isMobile ? "small" : "medium"} />} iconPosition={isMobile ? "top" : "start"} />
+            <Tab 
+              label="Employees" 
+              icon={isMobile ? <People fontSize="small" /> : <People />} 
+              iconPosition={isMobile ? "top" : "start"} 
+              sx={{ flexDirection: isMobile ? 'column' : 'row' }}
+            />
+            <Tab 
+              label="Salaries" 
+              icon={isMobile ? <AttachMoney fontSize="small" /> : <AttachMoney />} 
+              iconPosition={isMobile ? "top" : "start"} 
+              sx={{ flexDirection: isMobile ? 'column' : 'row' }}
+            />
+            <Tab 
+              label="Advances" 
+              icon={isMobile ? <PersonSearch fontSize="small" /> : <PersonSearch />} 
+              iconPosition={isMobile ? "top" : "start"} 
+              sx={{ flexDirection: isMobile ? 'column' : 'row' }}
+            />
+            <Tab 
+              label="Attendance" 
+              icon={isMobile ? <CalendarToday fontSize="small" /> : <CalendarToday />} 
+              iconPosition={isMobile ? "top" : "start"} 
+              sx={{ flexDirection: isMobile ? 'column' : 'row' }}
+            />
           </Tabs>
         </Paper>
 
         {/* Filter Section */}
-        <Accordion sx={{ mb: 2 }}>
-          <AccordionSummary expandIcon={<ExpandMore />}>
+        <Accordion sx={{ mb: 2, boxShadow: 1 }}>
+          <AccordionSummary expandIcon={<ExpandMore />} sx={{ minHeight: '48px !important' }}>
             <Stack direction="row" alignItems="center" spacing={1}>
-              <FilterList fontSize="small" />
-              <Typography variant="body1">Advanced Filters</Typography>
+              <FilterList fontSize={isMobile ? "small" : "medium"} />
+              <Typography variant={isMobile ? "body2" : "body1"}>Filters</Typography>
             </Stack>
           </AccordionSummary>
-          <AccordionDetails>
-            <Grid container spacing={2}>
+          <AccordionDetails sx={{ p: isMobile ? 1 : 2 }}>
+            <Grid container spacing={1}>
               <Grid item xs={12} sm={6} md={3}>
                 <TextField
                   fullWidth
                   label="Search"
-                  size={isMobile ? "small" : "medium"}
+                  size="small"
                   value={searchTerm}
                   onChange={(e) => {
                     setSearchTerm(e.target.value);
@@ -288,14 +362,14 @@ const HRMPage = () => {
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        <Search fontSize={isMobile ? "small" : "medium"} />
+                        <Search fontSize="small" />
                       </InputAdornment>
                     ),
                   }}
                 />
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+                <FormControl fullWidth size="small">
                   <InputLabel>Department</InputLabel>
                   <Select
                     value={filters.department}
@@ -310,7 +384,7 @@ const HRMPage = () => {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size={isMobile ? "small" : "medium"}>
+                <FormControl fullWidth size="small">
                   <InputLabel>Status</InputLabel>
                   <Select
                     value={filters.status}
@@ -340,7 +414,7 @@ const HRMPage = () => {
                     slotProps={{
                       textField: {
                         fullWidth: true,
-                        size: isMobile ? "small" : "medium"
+                        size: "small"
                       }
                     }}
                   />
@@ -354,19 +428,19 @@ const HRMPage = () => {
                     slotProps={{
                       textField: {
                         fullWidth: true,
-                        size: isMobile ? "small" : "medium"
+                        size: "small"
                       }
                     }}
                   />
-                  <IconButton 
+                  <IconButton
                     onClick={() => setFilters({
                       department: '',
                       status: '',
                       dateRange: { start: null, end: null }
                     })}
-                    size={isMobile ? "small" : "medium"}
+                    size="small"
                   >
-                    <Clear fontSize={isMobile ? "small" : "medium"} />
+                    <Clear fontSize="small" />
                   </IconButton>
                 </Stack>
               </Grid>
@@ -375,45 +449,47 @@ const HRMPage = () => {
         </Accordion>
 
         {loading ? (
-          <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
-            <CircularProgress />
-            <Typography variant="body1" sx={{ ml: 2 }}>Loading data...</Typography>
+          <Box display="flex" justifyContent="center" alignItems="center" minHeight="100px">
+            <CircularProgress size={isMobile ? 24 : 40} />
+            <Typography variant="body2" sx={{ ml: 2 }}>Loading...</Typography>
           </Box>
         ) : (
-          <Box sx={{ 
-            width: '100%', 
-            overflowX: activeTab === 3 ? 'auto' : 'visible',
+          <Box sx={{
+            width: '100%',
+            overflowX: 'auto',
             '&::-webkit-scrollbar': {
-              height: '6px'
+              height: '4px'
             },
             '&::-webkit-scrollbar-thumb': {
               backgroundColor: 'rgba(0,0,0,0.2)',
-              borderRadius: '3px'
+              borderRadius: '2px'
             }
           }}>
             {activeTab === 0 && (
-             <EmployeesTab
-  employees={employees}
-  loading={loading}
-  fetchData={fetchData}
-  searchTerm={searchTerm}
-  setSearchTerm={setSearchTerm}
-  filters={filters}
-  setFilters={setFilters}
-  sortBy={sortBy}
-  sortDirection={sortDirection}
-  handleSort={handleSort}
-  selectedEmployees={selectedEmployees}
-  setSelectedEmployees={setSelectedEmployees}
-  page={page}
-  setPage={setPage}
-  rowsPerPage={rowsPerPage}
-  filteredData={filteredData}
-  openHistoryDialog={openHistoryDialog}
-  setOpenHistoryDialog={setOpenHistoryDialog}
-  setSelectedHistoryEmployee={setSelectedHistoryEmployee}
-  handleExport={handleExport}
-/>
+              <EmployeesTab
+                employees={employees}
+                loading={loading}
+                fetchData={fetchData}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                filters={filters}
+                setFilters={setFilters}
+                sortBy={sortBy}
+                sortDirection={sortDirection}
+                handleSort={handleSort}
+                selectedEmployees={selectedEmployees}
+                setSelectedEmployees={setSelectedEmployees}
+                page={page}
+                setPage={setPage}
+                rowsPerPage={rowsPerPage}
+                filteredData={filteredData}
+                openHistoryDialog={openHistoryDialog}
+                setOpenHistoryDialog={setOpenHistoryDialog}
+                setSelectedHistoryEmployee={setSelectedHistoryEmployee}
+                handleExport={handleExport}
+                onNotify={handleNotify}
+                isMobile={isMobile}
+              />
             )}
 
             {activeTab === 1 && (
@@ -428,6 +504,7 @@ const HRMPage = () => {
                 employees={employees}
                 selectedEmployees={selectedEmployees}
                 handleExport={handleExport}
+                isMobile={isMobile}
               />
             )}
 
@@ -442,11 +519,12 @@ const HRMPage = () => {
                 setOpenHistoryDialog={setOpenHistoryDialog}
                 selectedHistoryEmployee={selectedHistoryEmployee}
                 setSelectedHistoryEmployee={setSelectedHistoryEmployee}
+                isMobile={isMobile}
               />
             )}
 
             {activeTab === 3 && (
-              <Box sx={{ minWidth: isMobile ? '800px' : '100%' }}>
+              <Box sx={{ minWidth: isMobile ? '100%' : '100%' }}>
                 <AttendanceTrackingTab
                   attendances={attendances}
                   loading={loading}
@@ -459,6 +537,7 @@ const HRMPage = () => {
                   selectedEmployees={selectedEmployees}
                   setSelectedEmployees={setSelectedEmployees}
                   handleExport={handleExport}
+                  isMobile={isMobile}
                 />
               </Box>
             )}

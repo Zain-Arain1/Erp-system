@@ -5,12 +5,12 @@ import {
   TableBody, Button, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Chip, Avatar, CircularProgress,
   Tooltip, Alert, Grid, InputAdornment, TableContainer, TablePagination,
-  useMediaQuery, useTheme, Divider
+  useMediaQuery, useTheme, Divider, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import {
-  AttachMoney, CloudDownload, Add, Paid,
-  Search, Clear, Visibility, Info
+  AttachMoney, CloudDownload, Add, Paid, Edit,
+  Search, Clear, Visibility, Info, Group
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import axios from 'axios';
@@ -52,14 +52,18 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { enqueueSnackbar } = useSnackbar();
 
-  // State for dialog and form
+  // State for dialogs and forms
   const [openSalaryDialog, setOpenSalaryDialog] = useState(false);
   const [openViewDialog, setOpenViewDialog] = useState(false);
+  const [openDepartmentDialog, setOpenDepartmentDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<SalaryRecord | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [selectedEmployeeDetails, setSelectedEmployeeDetails] = useState<any>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
   const [salaryForm, setSalaryForm] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
@@ -76,18 +80,29 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Get unique departments
+  const departments = useMemo(() => {
+    const depts = new Set<string>();
+    employees.forEach(emp => {
+      if (emp.department) {
+        depts.add(emp.department);
+      }
+    });
+    return Array.from(depts);
+  }, [employees]);
+
   // Filter records by search term
   const filteredRecords = useMemo(() => {
     return salaryRecords.filter(record => {
       const searchLower = searchTerm.toLowerCase();
       return (
-        record.employeeName?.toLowerCase().includes(searchLower) ||
-        record.employeePosition?.toLowerCase().includes(searchLower) ||
-        record.department?.toLowerCase().includes(searchLower) ||
-        record.status?.toLowerCase().includes(searchLower) ||
-        record.employeeContact?.includes(searchTerm) ||
-        record.employeeEmail?.includes(searchTerm) ||
-        record.netSalary?.toString().includes(searchTerm)
+        (record.employeeName?.toLowerCase().includes(searchLower) ?? false) ||
+        (record.employeePosition?.toLowerCase().includes(searchLower) ?? false) ||
+        (record.department?.toLowerCase().includes(searchLower) ?? false) ||
+        (record.status?.toLowerCase().includes(searchLower) ?? false) ||
+        (record.employeeContact?.includes(searchTerm) ?? false) ||
+        (record.employeeEmail?.includes(searchTerm) ?? false) ||
+        (record.netSalary?.toString().includes(searchTerm) ?? false)
       );
     });
   }, [salaryRecords, searchTerm]);
@@ -159,10 +174,171 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
     }
   };
 
+  const handleDepartmentSalarySubmit = async () => {
+    try {
+      if (!selectedDepartment) {
+        enqueueSnackbar('Please select a department', { variant: 'warning' });
+        return;
+      }
+
+      const departmentEmployees = employees
+        .filter(emp => emp.department === selectedDepartment)
+        .map(emp => emp._id);
+
+      if (departmentEmployees.length === 0) {
+        enqueueSnackbar('No employees found in selected department', { variant: 'warning' });
+        return;
+      }
+
+      await api.post('/salaries/bulk', {
+        employees: departmentEmployees,
+        month: salaryForm.month,
+        year: salaryForm.year,
+        allowances: salaryForm.allowances || 0,
+        deductions: salaryForm.deductions || 0,
+        bonuses: salaryForm.bonuses || 0
+      });
+      enqueueSnackbar(`Salary records added for ${departmentEmployees.length} employees`, { variant: 'success' });
+      resetDepartmentForm();
+      await fetchData();
+    } catch (error: any) {
+      console.error('Error saving department salaries:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Failed to add department salary records', {
+        variant: 'error',
+        autoHideDuration: 3000
+      });
+    }
+  };
+
+  const handleMarkDepartmentPaid = async () => {
+    try {
+      if (!selectedDepartment) {
+        enqueueSnackbar('Please select a department', { variant: 'warning' });
+        return;
+      }
+
+      const departmentEmployees = employees
+        .filter(emp => emp.department === selectedDepartment)
+        .map(emp => emp._id);
+
+      if (departmentEmployees.length === 0) {
+        enqueueSnackbar('No employees found in selected department', { variant: 'warning' });
+        return;
+      }
+
+      const pendingSalaries = salaryRecords
+        .filter(record => 
+          record.employeeId && 
+          departmentEmployees.includes(record.employeeId) &&
+          record.status === 'pending' &&
+          record.month === currentMonth &&
+          record.year === currentYear
+        )
+        .map(record => record._id)
+        .filter((id): id is string => id !== undefined);
+
+      if (pendingSalaries.length === 0) {
+        enqueueSnackbar('No pending salaries found for selected department', { variant: 'warning' });
+        return;
+      }
+
+      await Promise.all(
+        pendingSalaries.map(id =>
+          api.patch(`/salaries/${id}`, {
+            status: 'paid',
+            paymentDate: new Date().toISOString()
+          })
+        )
+      );
+      enqueueSnackbar(`Marked ${pendingSalaries.length} salaries as paid`, { variant: 'success' });
+      setSelectedDepartment('');
+      await fetchData();
+    } catch (error: any) {
+      console.error('Error marking department salaries as paid:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Failed to mark department salaries as paid', {
+        variant: 'error',
+        autoHideDuration: 3000
+      });
+    }
+  };
+
+  const handleEditSubmit = async () => {
+    try {
+      if (!selectedRecord) {
+        enqueueSnackbar('No record selected for editing', { variant: 'warning' });
+        return;
+      }
+
+      const employee = employees.find(emp => emp._id === selectedRecord.employeeId);
+      if (!employee) {
+        enqueueSnackbar('Employee not found', { variant: 'error' });
+        return;
+      }
+
+      const basicSalary = Number(employee.basicSalary) || 0;
+      const allowances = Number(salaryForm.allowances) || 0;
+      const deductions = Number(salaryForm.deductions) || 0;
+      const bonuses = Number(salaryForm.bonuses) || 0;
+      const netSalary = basicSalary + allowances - deductions + bonuses;
+
+      await api.patch(`/salaries/${selectedRecord._id}`, {
+        month: salaryForm.month,
+        year: salaryForm.year,
+        basicSalary,
+        allowances,
+        deductions,
+        bonuses,
+        netSalary,
+        department: employee.department || '',
+        employeeName: employee.name,
+        employeePosition: employee.position
+      });
+      enqueueSnackbar('Salary record updated successfully', { variant: 'success' });
+      resetEditForm();
+      await fetchData();
+    } catch (error: any) {
+      console.error('Error updating salary:', error);
+      enqueueSnackbar(error.response?.data?.message || 'Failed to update salary record', {
+        variant: 'error',
+        autoHideDuration: 3000
+      });
+    }
+  };
+
   const resetSalaryForm = () => {
     setOpenSalaryDialog(false);
     setSelectedEmployee('');
     setSelectedEmployeeDetails(null);
+    setSalaryForm({
+      month: new Date().getMonth() + 1,
+      year: new Date().getFullYear(),
+      allowances: 0,
+      deductions: 0,
+      bonuses: 0,
+      employeeName: '',
+      employeePosition: '',
+      department: ''
+    });
+  };
+
+  const resetDepartmentForm = () => {
+    setOpenDepartmentDialog(false);
+    setSelectedDepartment('');
+    setSalaryForm({
+      month: new Date().getMonth() + 1,
+      year: new Date().getFullYear(),
+      allowances: 0,
+      deductions: 0,
+      bonuses: 0,
+      employeeName: '',
+      employeePosition: '',
+      department: ''
+    });
+  };
+
+  const resetEditForm = () => {
+    setOpenEditDialog(false);
+    setSelectedRecord(null);
     setSalaryForm({
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
@@ -197,6 +373,21 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
     setOpenViewDialog(true);
   };
 
+  const handleEditRecord = (record: SalaryRecord) => {
+    setSelectedRecord(record);
+    setSalaryForm({
+      month: record.month,
+      year: record.year,
+      allowances: record.allowances || 0,
+      deductions: record.deductions || 0,
+      bonuses: record.bonuses || 0,
+      employeeName: record.employeeName || '',
+      employeePosition: record.employeePosition || '',
+      department: record.department || ''
+    });
+    setOpenEditDialog(true);
+  };
+
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
@@ -222,44 +413,51 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
   }, [salaryRecords]);
 
   return (
-    <Box sx={{ p: isMobile ? 1 : 3 }}>
+    <Box sx={{ 
+      // p: { xs: 1, sm: 2, md: 3 }, 
+      maxWidth: '100vw', 
+      overflowX: 'auto',
+      boxSizing: 'border-box'
+    }}>
       {/* Summary Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-  <Grid item xs={12} sm={6} md={3}>
-    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#1976d2', color: '#ffffff' }}>
-      <Typography variant="h6">Total Records</Typography>
-      <Typography variant="h4">{salaryRecords.length}</Typography>
-    </Paper>
-  </Grid>
-  <Grid item xs={12} sm={6} md={3}>
-    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#2e7d32', color: '#ffffff' }}>
-      <Typography variant="h6">Paid</Typography>
-      <Typography variant="h4">{summaryStats.totalPaid}</Typography>
-    </Paper>
-  </Grid>
-  <Grid item xs={12} sm={6} md={3}>
-    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#ed6c02', color: '#ffffff' }}>
-      <Typography variant="h6">Pending</Typography>
-      <Typography variant="h4">{summaryStats.totalPending}</Typography>
-    </Paper>
-  </Grid>
-  <Grid item xs={12} sm={6} md={3}>
-    <Paper sx={{ p: 2, textAlign: 'center', bgcolor: '#0288d1', color: '#ffffff' }}>
-      <Typography variant="h6">Total Amount</Typography>
-      <Typography variant="h4">
-        ${summaryStats.totalAmount.toLocaleString('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}
-      </Typography>
-    </Paper>
-  </Grid>
-</Grid>
-
+      <Grid container spacing={{ xs: 1, sm: 2 }} sx={{ mb: { xs: 1, sm: 2 } }}>
+        {[
+          { title: 'Total Records', value: salaryRecords.length, color: '#1976d2' },
+          { title: 'Paid', value: summaryStats.totalPaid, color: '#2e7d32' },
+          { title: 'Pending', value: summaryStats.totalPending, color: '#ed6c02' },
+          { title: 'Total Amount', value: `$${summaryStats.totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, color: '#0288d1' }
+        ].map((stat, index) => (
+          <Grid item xs={12} sm={6} md={3} key={index}>
+            <Paper sx={{ 
+              p: { xs: 1, sm: 2 }, 
+              textAlign: 'center', 
+              bgcolor: stat.color, 
+              color: '#ffffff',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center'
+            }}>
+              <Typography variant={isMobile ? "body1" : "h6"}>{stat.title}</Typography>
+              <Typography variant={isMobile ? "h6" : "h4"}>{stat.value}</Typography>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
 
       {/* Filters and Actions */}
-      <Box display="flex" flexDirection={isMobile ? 'column' : 'row'} justifyContent="space-between" alignItems="center" mb={3} gap={2}>
-        <Box display="flex" gap={1} width={isMobile ? '100%' : 'auto'}>
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', sm: 'row' }, 
+          justifyContent: 'space-between', 
+          alignItems: { xs: 'stretch', sm: 'center' }, 
+          mb: { xs: 1, sm: 2 }, 
+          gap: 1,
+          flexWrap: 'wrap'
+        }}
+      >
+        <Box sx={{ display: 'flex', width: { xs: '100%', sm: 'auto' }, flex: 1 }}>
           <TextField
             label="Search"
             variant="outlined"
@@ -278,12 +476,18 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                 </IconButton>
               )
             }}
-            fullWidth={isMobile}
+            sx={{ width: { xs: '100%', sm: '250px' } }}
           />
         </Box>
 
-        <Box display="flex" gap={1} width={isMobile ? '100%' : 'auto'}>
-          <Box display="flex" gap={1}>
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 1, 
+          flexWrap: 'wrap', 
+          width: { xs: '100%', sm: 'auto' },
+          justifyContent: { xs: 'space-between', sm: 'flex-end' }
+        }}>
+          <Box sx={{ display: 'flex', gap: 1 }}>
             <TextField
               label="Month"
               type="number"
@@ -291,7 +495,7 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
               onChange={(e) => setCurrentMonth(Math.min(12, Math.max(1, parseInt(e.target.value) || 1)))}
               inputProps={{ min: 1, max: 12 }}
               size="small"
-              sx={{ width: 100 }}
+              sx={{ width: { xs: '48%', sm: 100 } }}
             />
             <TextField
               label="Year"
@@ -299,7 +503,7 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
               value={currentYear}
               onChange={(e) => setCurrentYear(parseInt(e.target.value) || new Date().getFullYear())}
               size="small"
-              sx={{ width: 100 }}
+              sx={{ width: { xs: '48%', sm: 100 } }}
             />
           </Box>
 
@@ -307,7 +511,11 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
             variant="outlined"
             startIcon={<CloudDownload />}
             onClick={() => handleExport('salaries')}
-            sx={{ whiteSpace: 'nowrap' }}
+            sx={{ 
+              whiteSpace: 'nowrap', 
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              px: { xs: 1, sm: 2 }
+            }}
           >
             {isMobile ? 'Export' : 'Export Data'}
           </Button>
@@ -316,72 +524,99 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
             color="primary"
             startIcon={<Add />}
             onClick={() => setOpenSalaryDialog(true)}
-            sx={{ whiteSpace: 'nowrap' }}
+            sx={{ 
+              whiteSpace: 'nowrap', 
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              px: { xs: 1, sm: 2 }
+            }}
           >
             {isMobile ? 'Add' : 'Add Salary'}
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<Group />}
+            onClick={() => setOpenDepartmentDialog(true)}
+            sx={{ 
+              whiteSpace: 'nowrap', 
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              px: { xs: 1, sm: 2 }
+            }}
+          >
+            {isMobile ? 'Dept' : 'Department Salaries'}
           </Button>
         </Box>
       </Box>
 
       {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          minHeight: '200px' 
+        }}>
           <CircularProgress />
         </Box>
       ) : (
         <>
-          <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: 3 }}>
-            <Table>
+          <TableContainer component={Paper} sx={{ 
+            borderRadius: 2, 
+            boxShadow: { xs: 1, sm: 3 }, 
+            maxWidth: '100%',
+            overflowX: 'auto'
+          }}>
+            <Table sx={{ minWidth: { xs: 'auto', sm: 650 } }}>
               <TableHead sx={{ bgcolor: theme.palette.grey[100] }}>
                 <TableRow>
-                  <TableCell>Employee</TableCell>
-                  {!isMobile && <TableCell>Position</TableCell>}
-                  {!isMobile && <TableCell>Department</TableCell>}
-                  <TableCell>Period</TableCell>
-                  {!isMobile && <TableCell>Basic</TableCell>}
-                  {!isMobile && <TableCell>Allowances</TableCell>}
-                  {!isMobile && <TableCell>Deductions</TableCell>}
-                  {!isMobile && <TableCell>Bonuses</TableCell>}
-                  <TableCell>Net Salary</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="center">Actions</TableCell>
+                  <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Employee</TableCell>
+                  {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Position</TableCell>}
+                  {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Department</TableCell>}
+                  <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Period</TableCell>
+                  {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Basic</TableCell>}
+                  {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Allowances</TableCell>}
+                  {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Deductions</TableCell>}
+                  {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Bonuses</TableCell>}
+                  <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Net Salary</TableCell>
+                  <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Status</TableCell>
+                  <TableCell align="center" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {paginatedRecords.length > 0 ? (
                   paginatedRecords.map((record: SalaryRecord) => (
                     <TableRow key={record._id} hover>
-                      <TableCell>
-                        <Box display="flex" alignItems="center" gap={2}>
-                          <Avatar src={record.employeeAvatar}>
+                      <TableCell sx={{ py: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Avatar src={record.employeeAvatar} sx={{ width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}>
                             {record.employeeName?.charAt(0) || '?'}
                           </Avatar>
                           <Box>
-                            <Typography fontWeight="bold">
+                            <Typography sx={{ fontWeight: 'bold', fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
                               {record.employeeName || 'Unknown'}
                             </Typography>
                             {isMobile && (
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                                 {record.employeePosition || '-'}
                               </Typography>
                             )}
                           </Box>
                         </Box>
                       </TableCell>
-                      {!isMobile && <TableCell>{record.employeePosition || '-'}</TableCell>}
-                      {!isMobile && <TableCell>{record.department || '-'}</TableCell>}
-                      <TableCell>
+                      {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>{record.employeePosition || '-'}</TableCell>}
+                      {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>{record.department || '-'}</TableCell>}
+                      <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>
                         {format(new Date(record.year, record.month - 1, 1), 'MMM yyyy')}
                       </TableCell>
-                      {!isMobile && <TableCell>${record.basicSalary?.toFixed(2) || '0.00'}</TableCell>}
-                      {!isMobile && <TableCell>${record.allowances?.toFixed(2) || '0.00'}</TableCell>}
-                      {!isMobile && <TableCell>${record.deductions?.toFixed(2) || '0.00'}</TableCell>}
-                      {!isMobile && <TableCell>${record.bonuses?.toFixed(2) || '0.00'}</TableCell>}
-                      <TableCell>
-                        <Typography fontWeight="bold">
+                      {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>${record.basicSalary?.toFixed(2) || '0.00'}</TableCell>}
+                      {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>${record.allowances?.toFixed(2) || '0.00'}</TableCell>}
+                      {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>${record.deductions?.toFixed(2) || '0.00'}</TableCell>}
+                      {!isMobile && <TableCell sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>${record.bonuses?.toFixed(2) || '0.00'}</TableCell>}
+                      <TableCell sx={{ py: 1 }}>
+                        <Typography sx={{ fontWeight: 'bold', fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
                           ${record.netSalary?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ py: 1 }}>
                         <Chip
                           label={record.status?.toUpperCase() || 'UNKNOWN'}
                           color={
@@ -391,10 +626,11 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                           }
                           size="small"
                           variant="outlined"
+                          sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
                         />
                       </TableCell>
-                      <TableCell align="center">
-                        <Box display="flex" gap={1} justifyContent="center">
+                      <TableCell align="center" sx={{ py: 1 }}>
+                        <Box sx={{ display: 'flex', gap: { xs: 0.5, sm: 1 }, justifyContent: 'center' }}>
                           <Tooltip title="View Details">
                             <IconButton
                               size="small"
@@ -402,6 +638,15 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                               color="info"
                             >
                               <Visibility fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Edit Record">
+                            <IconButton
+                              size="small"
+                              onClick={() => handleEditRecord(record)}
+                              color="primary"
+                            >
+                              <Edit fontSize="small" />
                             </IconButton>
                           </Tooltip>
                           {record.status === 'pending' && (
@@ -422,7 +667,7 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                 ) : (
                   <TableRow>
                     <TableCell colSpan={isMobile ? 5 : 11} align="center">
-                      <Typography variant="body1" color="text.secondary" py={3}>
+                      <Typography variant="body1" color="text.secondary" sx={{ py: 2, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
                         No salary records found
                       </Typography>
                     </TableCell>
@@ -440,7 +685,7 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            sx={{ mt: 2 }}
+            sx={{ mt: 1, '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
           />
         </>
       )}
@@ -449,18 +694,19 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
       <Dialog
         open={openSalaryDialog}
         onClose={resetSalaryForm}
-        maxWidth="sm"
+        maxWidth={isMobile ? 'xs' : 'sm'}
         fullWidth
+        fullScreen={isMobile}
       >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
+        <DialogTitle sx={{ py: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <AttachMoney color="primary" />
-            <Typography variant="h6">Add Salary Record</Typography>
+            <Typography variant={isMobile ? 'body1' : 'h6'}>Add Salary Record</Typography>
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 1, sm: 2 } }}>
           {selectedEmployees.length > 0 ? (
-            <Alert severity="info" sx={{ mb: 2 }}>
+            <Alert severity="info" sx={{ mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
               Adding salary records for {selectedEmployees.length} selected employees
             </Alert>
           ) : (
@@ -468,7 +714,6 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
               <Autocomplete
                 options={employees}
                 getOptionLabel={(option) => `${option.name} (${option.position})`}
-                // Add this line to ensure unique keys
                 getOptionKey={(option) => option._id}
                 onChange={(_, value) => {
                   if (value) {
@@ -498,31 +743,32 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                     label="Employee"
                     required
                     fullWidth
+                    sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
                   />
                 )}
               />
 
               {selectedEmployeeDetails && (
-                <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ mt: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <Typography variant={isMobile ? 'body2' : 'subtitle1'} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Info color="info" /> Employee Details
                   </Typography>
                   <Grid container spacing={1}>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Department:</Typography>
-                      <Typography>{selectedEmployeeDetails.department || '-'}</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Department:</Typography>
+                      <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>{selectedEmployeeDetails.department || '-'}</Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Basic Salary:</Typography>
-                      <Typography>${selectedEmployeeDetails.basicSalary?.toFixed(2) || '0.00'}</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Basic Salary:</Typography>
+                      <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>${selectedEmployeeDetails.basicSalary?.toFixed(2) || '0.00'}</Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Email:</Typography>
-                      <Typography>{selectedEmployeeDetails.email || '-'}</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Email:</Typography>
+                      <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>{selectedEmployeeDetails.email || '-'}</Typography>
                     </Grid>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Contact:</Typography>
-                      <Typography>{selectedEmployeeDetails.contact || '-'}</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Contact:</Typography>
+                      <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>{selectedEmployeeDetails.contact || '-'}</Typography>
                     </Grid>
                   </Grid>
                 </Box>
@@ -530,10 +776,10 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
             </>
           )}
 
-          <Grid container spacing={2} sx={{ mt: 1 }}>
+          <Grid container spacing={1} sx={{ mt: 1 }}>
             <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Month"
                 type="number"
@@ -544,11 +790,12 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                 })}
                 inputProps={{ min: 1, max: 12 }}
                 required
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Year"
                 type="number"
@@ -558,11 +805,12 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                   year: parseInt(e.target.value) || new Date().getFullYear()
                 })}
                 required
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75 pur: 0.75rem' } }}}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Allowances"
                 type="number"
@@ -574,11 +822,12 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                 InputProps={{
                   startAdornment: <InputAdornment position="start">$</InputAdornment>,
                 }}
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
               />
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Deductions"
                 type="number"
@@ -590,11 +839,12 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                 InputProps={{
                   startAdornment: <InputAdornment position="start">$</InputAdornment>,
                 }}
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
               />
             </Grid>
             <Grid item xs={12}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Bonuses"
                 type="number"
@@ -606,19 +856,309 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                 InputProps={{
                   startAdornment: <InputAdornment position="start">$</InputAdornment>,
                 }}
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
               />
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={resetSalaryForm} color="inherit">Cancel</Button>
+        <DialogActions sx={{ px: { xs: 1, sm: 2 }, py: 1 }}>
+          <Button onClick={resetSalaryForm} color="inherit" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Cancel</Button>
           <Button
             onClick={handleSalarySubmit}
             variant="contained"
             color="primary"
             disabled={!selectedEmployee && selectedEmployees.length === 0}
+            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
           >
             Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Department Salary Dialog */}
+      <Dialog
+        open={openDepartmentDialog}
+        onClose={resetDepartmentForm}
+        maxWidth={isMobile ? 'xs' : 'sm'}
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle sx={{ py: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Group color="primary" />
+            <Typography variant={isMobile ? 'body1' : 'h6'}>Department Salary Management</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ px: { xs: 1, sm: 2 } }}>
+          <FormControl fullWidth margin="dense">
+            <InputLabel sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Department</InputLabel>
+            <Select
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value as string)}
+              label="Department"
+              sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+            >
+              {departments.map((dept) => (
+                <MenuItem key={dept} value={dept} sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
+                  {dept}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Grid container spacing={1} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                margin="dense"
+                fullWidth
+                label="Month"
+                type="number"
+                value={salaryForm.month}
+                onChange={(e) => setSalaryForm({
+                  ...salaryForm,
+                  month: Math.min(12, Math.max(1, parseInt(e.target.value) || 1))
+                })}
+                inputProps={{ min: 1, max: 12 }}
+                required
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                margin="dense"
+                fullWidth
+                label="Year"
+                type="number"
+                value={salaryForm.year}
+                onChange={(e) => setSalaryForm({
+                  ...salaryForm,
+                  year: parseInt(e.target.value) || new Date().getFullYear()
+                })}
+                required
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                margin="dense"
+                fullWidth
+                label="Allowances"
+                type="number"
+                value={salaryForm.allowances}
+                onChange={(e) => setSalaryForm({
+                  ...salaryForm,
+                  allowances: parseFloat(e.target.value) || 0
+                })}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                }}
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                margin="dense"
+                fullWidth
+                label="Deductions"
+                type="number"
+                value={salaryForm.deductions}
+                onChange={(e) => setSalaryForm({
+                  ...salaryForm,
+                  deductions: parseFloat(e.target.value) || 0
+                })}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                }}
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                margin="dense"
+                fullWidth
+                label="Bonuses"
+                type="number"
+                value={salaryForm.bonuses}
+                onChange={(e) => setSalaryForm({
+                  ...salaryForm,
+                  bonuses: parseFloat(e.target.value) || 0
+                })}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                }}
+                sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+              />
+            </Grid>
+          </Grid>
+
+          {selectedDepartment && (
+            <Box sx={{ mt: 1 }}>
+              <Button
+                variant="contained"
+                color="success"
+                startIcon={<Paid />}
+                onClick={handleMarkDepartmentPaid}
+                fullWidth
+                sx={{ mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              >
+                Mark Department as Paid
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<Add />}
+                onClick={handleDepartmentSalarySubmit}
+                fullWidth
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              >
+                Create Department Salaries
+              </Button>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: { xs: 1, sm: 2 }, py: 1 }}>
+          <Button onClick={resetDepartmentForm} color="inherit" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Salary Dialog */}
+      <Dialog
+        open={openEditDialog}
+        onClose={resetEditForm}
+        maxWidth={isMobile ? 'xs' : 'sm'}
+        fullWidth
+        fullScreen={isMobile}
+      >
+        <DialogTitle sx={{ py: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Edit color="primary" />
+            <Typography variant={isMobile ? 'body1' : 'h6'}>Edit Salary Record</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ px: { xs: 1, sm: 2 } }}>
+          {selectedRecord && (
+            <>
+              <Box sx={{ mt: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Typography variant={isMobile ? 'body2' : 'subtitle1'} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Info color="info" /> Employee Details
+                </Typography>
+                <Grid container spacing={1}>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Name:</Typography>
+                    <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>{selectedRecord.employeeName || '-'}</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Department:</Typography>
+                    <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>{selectedRecord.department || '-'}</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Position:</Typography>
+                    <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>{selectedRecord.employeePosition || '-'}</Typography>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Basic Salary:</Typography>
+                    <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>${selectedRecord.basicSalary?.toFixed(2) || '0.00'}</Typography>
+                  </Grid>
+                </Grid>
+              </Box>
+
+              <Grid container spacing={1} sx={{ mt: 1 }}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    margin="dense"
+                    fullWidth
+                    label="Month"
+                    type="number"
+                    value={salaryForm.month}
+                    onChange={(e) => setSalaryForm({
+                      ...salaryForm,
+                      month: Math.min(12, Math.max(1, parseInt(e.target.value) || 1))
+                    })}
+                    inputProps={{ min: 1, max: 12 }}
+                    required
+                    sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    margin="dense"
+                    fullWidth
+                    label="Year"
+                    type="number"
+                    value={salaryForm.year}
+                    onChange={(e) => setSalaryForm({
+                      ...salaryForm,
+                      year: parseInt(e.target.value) || new Date().getFullYear()
+                    })}
+                    required
+                    sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    margin="dense"
+                    fullWidth
+                    label="Allowances"
+                    type="number"
+                    value={salaryForm.allowances}
+                    onChange={(e) => setSalaryForm({
+                      ...salaryForm,
+                      allowances: parseFloat(e.target.value) || 0
+                    })}
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    }}
+                    sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    margin="dense"
+                    fullWidth
+                    label="Deductions"
+                    type="number"
+                    value={salaryForm.deductions}
+                    onChange={(e) => setSalaryForm({
+                      ...salaryForm,
+                      deductions: parseFloat(e.target.value) || 0
+                    })}
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    }}
+                    sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    margin="dense"
+                    fullWidth
+                    label="Bonuses"
+                    type="number"
+                    value={salaryForm.bonuses}
+                    onChange={(e) => setSalaryForm({
+                      ...salaryForm,
+                      bonuses: parseFloat(e.target.value) || 0
+                    })}
+                    InputProps={{
+                      startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    }}
+                    sx={{ '& .MuiInputBase-root': { fontSize: { xs: '0.75rem', sm: '0.875rem' } } }}
+                  />
+                </Grid>
+              </Grid>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: { xs: 1, sm: 2 }, py: 1 }}>
+          <Button onClick={resetEditForm} color="inherit" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Cancel</Button>
+          <Button
+            onClick={handleEditSubmit}
+            variant="contained"
+            color="primary"
+            disabled={!selectedRecord}
+            sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+          >
+            Update
           </Button>
         </DialogActions>
       </Dialog>
@@ -627,44 +1167,45 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
       <Dialog
         open={openViewDialog}
         onClose={() => setOpenViewDialog(false)}
-        maxWidth="sm"
+        maxWidth={isMobile ? 'xs' : 'sm'}
         fullWidth
+        fullScreen={isMobile}
       >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
+        <DialogTitle sx={{ py: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Paid color="primary" />
-            <Typography variant="h6">Salary Details</Typography>
+            <Typography variant={isMobile ? 'body1' : 'h6'}>Salary Details</Typography>
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 1, sm: 2 } }}>
           {selectedRecord && (
             <Box>
-              <Box display="flex" alignItems="center" gap={2} mb={3}>
-                <Avatar src={selectedRecord.employeeAvatar} sx={{ width: 56, height: 56 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Avatar src={selectedRecord.employeeAvatar} sx={{ width: { xs: 40, sm: 56 }, height: { xs: 40, sm: 56 } }}>
                   {selectedRecord.employeeName?.charAt(0) || '?'}
                 </Avatar>
                 <Box>
-                  <Typography variant="h6" fontWeight="bold">
+                  <Typography sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                     {selectedRecord.employeeName || 'Unknown'}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                     {selectedRecord.employeePosition || '-'}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                     {selectedRecord.department || '-'}
                   </Typography>
                 </Box>
               </Box>
 
-              <Grid container spacing={2}>
+              <Grid container spacing={1}>
                 <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Period</Typography>
-                  <Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Period</Typography>
+                  <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                     {format(new Date(selectedRecord.year, selectedRecord.month - 1, 1), 'MMMM yyyy')}
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Status</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Status</Typography>
                   <Chip
                     label={selectedRecord.status?.toUpperCase() || 'UNKNOWN'}
                     color={
@@ -673,57 +1214,58 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
                           'error'
                     }
                     size="small"
+                    sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
                   />
                 </Grid>
 
                 {selectedRecord.employeeContact && (
                   <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary">Contact</Typography>
-                    <Typography>{selectedRecord.employeeContact}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Contact</Typography>
+                    <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>{selectedRecord.employeeContact}</Typography>
                   </Grid>
                 )}
 
                 {selectedRecord.employeeEmail && (
                   <Grid item xs={6}>
-                    <Typography variant="body2" color="text.secondary">Email</Typography>
-                    <Typography>{selectedRecord.employeeEmail}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Email</Typography>
+                    <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>{selectedRecord.employeeEmail}</Typography>
                   </Grid>
                 )}
 
-                <Grid item xs={12}><Divider sx={{ my: 2 }} /></Grid>
+                <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
 
                 <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Basic Salary</Typography>
-                  <Typography>${selectedRecord.basicSalary?.toFixed(2) || '0.00'}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Basic Salary</Typography>
+                  <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>${selectedRecord.basicSalary?.toFixed(2) || '0.00'}</Typography>
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Allowances</Typography>
-                  <Typography>${selectedRecord.allowances?.toFixed(2) || '0.00'}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Allowances</Typography>
+                  <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>${selectedRecord.allowances?.toFixed(2) || '0.00'}</Typography>
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Deductions</Typography>
-                  <Typography>${selectedRecord.deductions?.toFixed(2) || '0.00'}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Deductions</Typography>
+                  <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>${selectedRecord.deductions?.toFixed(2) || '0.00'}</Typography>
                 </Grid>
                 <Grid item xs={6}>
-                  <Typography variant="body2" color="text.secondary">Bonuses</Typography>
-                  <Typography>${selectedRecord.bonuses?.toFixed(2) || '0.00'}</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Bonuses</Typography>
+                  <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>${selectedRecord.bonuses?.toFixed(2) || '0.00'}</Typography>
                 </Grid>
 
-                <Grid item xs={12}><Divider sx={{ my: 2 }} /></Grid>
+                <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
 
                 <Grid item xs={12}>
-                  <Typography variant="body2" color="text.secondary">Net Salary</Typography>
-                  <Typography variant="h6" fontWeight="bold">
+                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Net Salary</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                     ${selectedRecord.netSalary?.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
                   </Typography>
                 </Grid>
 
                 {selectedRecord.status === 'paid' && selectedRecord.paymentDate && (
                   <>
-                    <Grid item xs={12}><Divider sx={{ my: 2 }} /></Grid>
+                    <Grid item xs={12}><Divider sx={{ my: 1 }} /></Grid>
                     <Grid item xs={12}>
-                      <Typography variant="body2" color="text.secondary">Payment Date</Typography>
-                      <Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>Payment Date</Typography>
+                      <Typography sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
                         {format(new Date(selectedRecord.paymentDate), 'PPPp')}
                       </Typography>
                     </Grid>
@@ -733,8 +1275,8 @@ const SalaryRecordTab: React.FC<SalaryRecordTabProps> = ({
             </Box>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenViewDialog(false)}>Close</Button>
+        <DialogActions sx={{ px: { xs: 1, sm: 2 }, py: 1 }}>
+          <Button onClick={() => setOpenViewDialog(false)} sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

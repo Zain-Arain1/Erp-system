@@ -1,4 +1,4 @@
-'use client'
+'use client';
 import { Grid, Box } from '@mui/material';
 import PageContainer from '@/app/(DashboardLayout)/components/container/PageContainer';
 // components
@@ -12,12 +12,15 @@ import MonthlyEarnings from '@/app/(DashboardLayout)/components/dashboard/Monthl
 const Dashboard = () => {
   return (
     <PageContainer title="Dashboard" description="this is Dashboard">
-      <Box>
+      <Box >
         <Grid container spacing={3}>
-          <Grid item xs={12} lg={8}>
+          {/* Sales Overview - takes full width on mobile, 8/12 on large */}
+          <Grid item xs={12} md={12} lg={8} xl={8}>
             <SalesOverview />
           </Grid>
-          <Grid item xs={12} lg={4}>
+
+          {/* Right Column - stacked on mobile, side by side on large */}
+          <Grid item xs={12} md={12} lg={4} xl={4}>
             <Grid container spacing={3}>
               <Grid item xs={12}>
                 <YearlyBreakup />
@@ -27,19 +30,25 @@ const Dashboard = () => {
               </Grid>
             </Grid>
           </Grid>
-          <Grid item xs={12} lg={4}>
+
+          {/* Transactions - full width on small, 4/12 on large */}
+          <Grid item xs={12} md={6} lg={4} xl={4}>
             <RecentTransactions />
           </Grid>
-          <Grid item xs={12} lg={8}>
+
+          {/* Table - full width on small, 8/12 on large */}
+          <Grid item xs={12} md={6} lg={8} xl={8}>
             <ColumnGroupingTable />
           </Grid>
+
+          {/* Blog - always full width */}
           <Grid item xs={12}>
             <Blog />
           </Grid>
         </Grid>
       </Box>
     </PageContainer>
-  )
-}
+  );
+};
 
 export default Dashboard;
