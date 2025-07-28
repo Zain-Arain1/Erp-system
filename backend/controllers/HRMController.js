@@ -762,13 +762,7 @@ exports.exportAttendances = async (req, res) => {
   }
 };
 let departmentCache = [
-  'HR',
-  'Finance',
-  'Engineering',
-  'Marketing',
-  'Sales',
-  'Operations',
-  'Customer Support'
+  
 ];
 
 exports.getDepartments = async (req, res) => {
