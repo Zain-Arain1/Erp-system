@@ -4,19 +4,21 @@ import {
   Box, Typography, Paper, Table, TableHead, TableRow, TableCell,
   TableBody, Button, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, Select, MenuItem, FormControl, InputLabel, CircularProgress,
-  IconButton, Chip, Avatar, FormControlLabel, Checkbox, Grid, Tooltip, Autocomplete,
-  useMediaQuery, useTheme, TablePagination, TableSortLabel, Badge
+  IconButton, Chip, Avatar, FormControlLabel, Checkbox, Grid, Tooltip,
+  Autocomplete, useMediaQuery, useTheme, TablePagination, TableSortLabel,
+  Card, CardContent, Stack, Collapse, Divider
 } from '@mui/material';
 import {
-  CalendarToday, CloudDownload, Add, GroupAdd, Edit, Delete, CheckCircle, Clear,
-  ArrowDropDown, ArrowDropUp, EventAvailable, EventBusy, Schedule, AccessTime, 
-  HourglassTop, HistoryToggleOff, Summarize, ViewWeek, FilterAlt
+  CalendarToday, CloudDownload, Add, GroupAdd, Edit, Delete, CheckCircle,
+  Clear, ArrowDropDown, ArrowDropUp, EventAvailable, EventBusy, Schedule,
+  AccessTime, HourglassTop, HistoryToggleOff, Summarize, ExpandMore
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
+import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { Attendance, AttendanceStatus } from './HRMTypes';
-import { useDepartments } from '@/app/hooks/useDepartments'; // Updated import path
+import { useDepartments } from '@/app/hooks/useDepartments';
 
 interface AttendanceTrackingTabProps {
   attendances: Attendance[];
@@ -35,9 +37,7 @@ interface AttendanceTrackingTabProps {
 const api = axios.create({
   baseURL: `${process.env.NEXT_PUBLIC_API_BASE_URL}/api/hrm`,
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  }
+  headers: { 'Content-Type': 'application/json' }
 });
 
 const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
@@ -54,13 +54,17 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
   handleExport
 }) => {
   const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('md'));
-  const isXSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const isXs = useMediaQuery(theme.breakpoints.down('sm'));
+  const isSm = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const isMd = useMediaQuery(theme.breakpoints.between('md', 'lg'));
+  const isLg = useMediaQuery(theme.breakpoints.up('lg'));
+
   const [openAttendanceDialog, setOpenAttendanceDialog] = useState(false);
   const [openBulkAttendanceDialog, setOpenBulkAttendanceDialog] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [editingAttendanceId, setEditingAttendanceId] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
+  const [showHistory, setShowHistory] = useState(false);
   const [attendanceForm, setAttendanceForm] = useState<{
     date: string;
     status: AttendanceStatus;
@@ -90,13 +94,12 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
     applyToAll: false
   });
   const [historyPage, setHistoryPage] = useState(0);
-  const [historyRowsPerPage, setHistoryRowsPerPage] = useState(10);
+  const [historyRowsPerPage, setHistoryRowsPerPage] = useState(5);
   const [historySortField, setHistorySortField] = useState<keyof Attendance>('date');
   const [historySortDirection, setHistorySortDirection] = useState<'asc' | 'desc'>('desc');
   const [historyFilterStatus, setHistoryFilterStatus] = useState<AttendanceStatus | 'all'>('all');
   const { enqueueSnackbar } = useSnackbar();
-
-  const {departments} = useDepartments(); 
+  const { departments } = useDepartments();
 
   const filteredEmployees = useMemo(() => {
     return selectedDepartment
@@ -104,7 +107,6 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
       : employees.filter(emp => emp.status === 'active');
   }, [employees, selectedDepartment]);
 
-  // Create attendance calendar data structure
   const attendanceCalendar = useMemo(() => {
     const start = startOfMonth(new Date(currentYear, currentMonth - 1));
     const end = endOfMonth(new Date(currentYear, currentMonth - 1));
@@ -124,94 +126,45 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
     }, {} as Record<string, Record<string, { status: AttendanceStatus | 'none'; _id: string | null }>>);
   }, [attendances, filteredEmployees, currentMonth, currentYear]);
 
-  // Enhanced table cell rendering with green tick for present employees
   const renderAttendanceCell = (employeeId: string, dateKey: string, attendance: { status: AttendanceStatus | 'none'; _id: string | null }) => {
     const cellStyles = {
       cursor: 'pointer',
-      backgroundColor: attendance?.status === 'present' ? 'rgba(76, 175, 80, 0.1)' : 'inherit',
-      px: isXSmallScreen ? 0.5 : 1,
-      py: 1,
-      minWidth: 40,
-      maxWidth: 40,
-      width: 40,
+      p: isXs ? 0.5 : 0.75,
+      minWidth: isXs ? 32 : 40,
+      maxWidth: isXs ? 32 : 40,
+      width: isXs ? 32 : 40,
       textAlign: 'center',
-      position: 'relative',
-      borderRight: '1px solid rgba(224, 224, 224, 0.3)',
+      borderRadius: 1,
+      bgcolor: attendance?.status === 'present' ? 'success.light' : 'transparent',
       '&:hover': {
-        backgroundColor: theme.palette.action.hover,
+        bgcolor: theme.palette.action.hover,
+        transform: 'scale(1.05)',
+        transition: 'all 0.2s ease-in-out'
       }
     };
 
     const statusIcons = {
-      present: (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <CheckCircle 
-            color="success" 
-            fontSize={isXSmallScreen ? 'small' : 'medium'} 
-            sx={{ 
-              position: 'relative',
-              '&:before': {
-                content: '""',
-                position: 'absolute',
-                top: -2,
-                left: -2,
-                right: -2,
-                bottom: -2,
-                backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                borderRadius: '50%',
-                zIndex: 0
-              }
-            }}
-          />
-        </Box>
-      ),
-      absent: <Clear color="error" fontSize={isXSmallScreen ? 'small' : 'medium'} />,
-      late: (
-        <Tooltip title="Late" arrow>
-          <Chip 
-            label="L" 
-            color="warning" 
-            size={isXSmallScreen ? 'small' : 'medium'} 
-            sx={{ width: 24, height: 24, fontSize: '0.75rem' }} 
-          />
-        </Tooltip>
-      ),
-      'half-day': (
-        <Tooltip title="Half Day" arrow>
-          <Chip 
-            label="H" 
-            color="info" 
-            size={isXSmallScreen ? 'small' : 'medium'} 
-            sx={{ width: 24, height: 24, fontSize: '0.75rem' }} 
-          />
-        </Tooltip>
-      ),
-      leave: (
-        <Tooltip title="Leave" arrow>
-          <Chip 
-            label="LV" 
-            color="secondary" 
-            size={isXSmallScreen ? 'small' : 'medium'} 
-            sx={{ width: 24, height: 24, fontSize: '0.75rem' }} 
-          />
-        </Tooltip>
-      ),
+      present: <CheckCircle color="success" fontSize={isXs ? 'small' : 'medium'} />,
+      absent: <Clear color="error" fontSize={isXs ? 'small' : 'medium'} />,
+      late: <Chip label="L" color="warning" size="small" sx={{ width: isXs ? 20 : 24, height: isXs ? 20 : 24 }} />,
+      'half-day': <Chip label="H" color="info" size="small" sx={{ width: isXs ? 20 : 24, height: isXs ? 20 : 24 }} />,
+      leave: <Chip label="LV" color="secondary" size="small" sx={{ width: isXs ? 20 : 24, height: isXs ? 20 : 24 }} />,
       none: null
     };
 
     return (
-      <TableCell
+      <Box
         key={`${employeeId}-${dateKey}`}
-        align="center"
         onClick={() => handleDateClick(employeeId, dateKey, attendance)}
         sx={cellStyles}
       >
-        {attendance?.status && statusIcons[attendance.status]}
-      </TableCell>
+        <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.95 }}>
+          {attendance?.status && statusIcons[attendance.status]}
+        </motion.div>
+      </Box>
     );
   };
 
-  // Enhanced attendance history handling
   const filteredHistory = useMemo(() => {
     let history = attendances.filter(att => 
       filteredEmployees.some(emp => emp._id === att.employeeId)
@@ -240,7 +193,7 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
       if (typeof aValue === 'string' && typeof bValue === 'string') {
         return historySortDirection === 'asc' 
           ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue);
+          : bValue.localeCompare(bValue);
       }
       
       return 0;
@@ -274,7 +227,7 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
         ? `/attendances/${editingAttendanceId}`
         : '/attendances';
 
-      const response = await api[method](url, {
+      await api[method](url, {
         employeeId: selectedEmployee,
         ...attendanceForm
       });
@@ -286,7 +239,6 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
       resetAttendanceForm();
       await fetchData();
     } catch (error: any) {
-      console.error('Error saving attendance:', error);
       enqueueSnackbar(error.response?.data?.message || 'Failed to add attendance record', {
         variant: 'error',
         autoHideDuration: 3000
@@ -395,7 +347,6 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
     }
   };
 
-  // Calculate summary statistics
   const calculateSummary = () => {
     const summary = {
       present: 0,
@@ -419,461 +370,398 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
 
   const summary = calculateSummary();
 
+  const renderEmployeeCard = (employee: any) => {
+    const days = eachDayOfInterval({
+      start: startOfMonth(new Date(currentYear, currentMonth - 1)),
+      end: endOfMonth(new Date(currentYear, currentMonth - 1))
+    });
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        key={employee._id}
+      >
+        <Card sx={{
+          mb: 1.5,
+          borderRadius: 2,
+          boxShadow: 2,
+          '&:hover': { boxShadow: 4, transform: 'translateY(-2px)' },
+          transition: 'all 0.2s ease-in-out'
+        }}>
+          <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
+            <Box display="flex" alignItems="center" mb={1}>
+              <Avatar src={employee.avatar} sx={{ width: isXs ? 32 : 40, height: isXs ? 32 : 40, mr: 2 }}>
+                {employee.name?.charAt(0)}
+              </Avatar>
+              <Box flex={1}>
+                <Typography variant={isXs ? 'body2' : 'h6'} fontWeight="bold">
+                  {employee.name}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {employee.department}
+                </Typography>
+              </Box>
+            </Box>
+            <Grid container spacing={0.5} wrap="wrap">
+              {days.map(day => {
+                const dateKey = format(day, 'yyyy-MM-dd');
+                const attendance = attendanceCalendar[dateKey]?.[employee._id];
+                return (
+                  <Grid item key={dateKey} xs={isXs ? 2 : 1.5} sm={1} md={0.75}>
+                    <Tooltip title={format(day, 'MMMM d, yyyy')}>
+                      <Box sx={{ textAlign: 'center' }}>
+                        <Typography variant="caption" fontSize={isXs ? 10 : 12}>
+                          {format(day, 'd')}
+                        </Typography>
+                        {renderAttendanceCell(employee._id, dateKey, attendance)}
+                      </Box>
+                    </Tooltip>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  };
+
   return (
     <Box sx={{
       width: '100%',
-      overflow: 'hidden',
-      px: isXSmallScreen ? 1 : 2,
-      py: 2
+      maxWidth: '100%',
+      px: { xs: 1, sm: 2, md: 3 },
+      py: { xs: 2, sm: 3 },
+      bgcolor: 'background.default',
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column'
     }}>
       {/* Header Section */}
-      <Box display="flex" flexDirection={isXSmallScreen ? 'column' : 'row'}
-        justifyContent="space-between" alignItems={isXSmallScreen ? 'flex-start' : 'center'}
-        mb={3} gap={2}>
-
-        <Box display="flex" gap={2} flexWrap="wrap" width={isXSmallScreen ? '100%' : 'auto'}>
-          <TextField
-            label="Month"
-            type="number"
-            value={currentMonth}
-            onChange={(e) => setCurrentMonth(Math.min(12, Math.max(1, parseInt(e.target.value) || 1)))}
-            inputProps={{ min: 1, max: 12 }}
-            size="small"
-            sx={{ minWidth: isXSmallScreen ? '30%' : 100 }}
-          />
-          <TextField
-            label="Year"
-            type="number"
-            value={currentYear}
-            onChange={(e) => setCurrentYear(parseInt(e.target.value) || new Date().getFullYear())}
-            size="small"
-            sx={{ minWidth: isXSmallScreen ? '30%' : 100 }}
-          />
-          <FormControl size="small" sx={{ minWidth: isXSmallScreen ? '35%' : 200 }}>
-            <InputLabel>Department</InputLabel>
-            <Select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              label="Department"
-            >
-              <MenuItem value="">
-                <em>All Departments</em>
-              </MenuItem>
-              {departments.map((dept) => (
-                <MenuItem key={dept} value={dept}>
-                  {dept}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <Box sx={{
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'space-between',
+          alignItems: { xs: 'stretch', sm: 'center' },
+          mb: 2,
+          gap: 1.5
+        }}>
+          <Box sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1,
+            width: { xs: '100%', sm: 'auto' }
+          }}>
+            <TextField
+              label="Month"
+              type="number"
+              value={currentMonth}
+              onChange={(e) => setCurrentMonth(Math.min(12, Math.max(1, parseInt(e.target.value) || 1)))}
+              inputProps={{ min: 1, max: 12 }}
+              size="small"
+              sx={{ width: { xs: '48%', sm: 100 }, borderRadius: 2 }}
+              variant="outlined"
+            />
+            <TextField
+              label="Year"
+              type="number"
+              value={currentYear}
+              onChange={(e) => setCurrentYear(parseInt(e.target.value) || new Date().getFullYear())}
+              size="small"
+              sx={{ width: { xs: '48%', sm: 100 }, borderRadius: 2 }}
+              variant="outlined"
+            />
+            <FormControl size="small" sx={{ width: { xs: '100%', sm: 200 }, borderRadius: 2 }}>
+              <InputLabel>Department</InputLabel>
+              <Select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                label="Department"
+              >
+                <MenuItem value="">
+                  <em>All Departments</em>
                 </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
+                {departments.map((dept) => (
+                  <MenuItem key={dept} value={dept}>
+                    {dept}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
 
-        <Box display="flex" gap={1} flexWrap="wrap" width={isXSmallScreen ? '100%' : 'auto'}>
-          <Button
-            variant="outlined"
-            startIcon={<CloudDownload />}
-            onClick={() => handleExport('attendances')}
-            sx={{ whiteSpace: 'nowrap' }}
-            size={isXSmallScreen ? 'small' : 'medium'}
-            fullWidth={isXSmallScreen}
-          >
-            {isXSmallScreen ? 'Export' : 'Export Data'}
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => {
-              resetAttendanceForm();
-              setOpenAttendanceDialog(true);
-            }}
-            sx={{ whiteSpace: 'nowrap' }}
-            size={isXSmallScreen ? 'small' : 'medium'}
-            fullWidth={isXSmallScreen}
-          >
-            {isXSmallScreen ? 'Add' : 'Add Single'}
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<GroupAdd />}
-            onClick={() => setOpenBulkAttendanceDialog(true)}
-            sx={{ whiteSpace: 'nowrap' }}
-            size={isXSmallScreen ? 'small' : 'medium'}
-            fullWidth={isXSmallScreen}
-          >
-            {isXSmallScreen ? 'Bulk' : 'Bulk Attendance'}
-          </Button>
+          <Box sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1,
+            width: { xs: '100%', sm: 'auto' }
+          }}>
+            <Button
+              variant="outlined"
+              startIcon={<CloudDownload />}
+              onClick={() => handleExport('attendances')}
+              size="small"
+              sx={{ flex: { xs: '1 0 100%', sm: '0 0 auto' }, minWidth: 44, height: 44, borderRadius: 2 }}
+            >
+              {isXs ? 'Export' : 'Export Data'}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => {
+                resetAttendanceForm();
+                setOpenAttendanceDialog(true);
+              }}
+              size="small"
+              sx={{ flex: { xs: '1 0 100%', sm: '0 0 auto' }, minWidth: 44, height: 44, borderRadius: 2 }}
+            >
+              {isXs ? 'Add' : 'Add Single'}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<GroupAdd />}
+              onClick={() => setOpenBulkAttendanceDialog(true)}
+              size="small"
+              sx={{ flex: { xs: '1 0 100%', sm: '0 0 auto' }, minWidth: 44, height: 44, borderRadius: 2 }}
+            >
+              {isXs ? 'Bulk' : 'Bulk Attendance'}
+            </Button>
+          </Box>
         </Box>
-      </Box>
+      </motion.div>
 
       {/* Summary Cards */}
-      <Box display="flex" flexWrap="wrap" gap={2} mb={3}>
-        <Paper sx={{ p: 2, flex: 1, minWidth: 150 }}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <EventAvailable color="success" />
-            <Typography variant="body1">Present</Typography>
-          </Box>
-          <Typography variant="h6" color="success.main">
-            {summary.present}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1, minWidth: 150 }}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <EventBusy color="error" />
-            <Typography variant="body1">Absent</Typography>
-          </Box>
-          <Typography variant="h6" color="error.main">
-            {summary.absent}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1, minWidth: 150 }}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Schedule color="warning" />
-            <Typography variant="body1">Late</Typography>
-          </Box>
-          <Typography variant="h6" color="warning.main">
-            {summary.late}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1, minWidth: 150 }}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <AccessTime color="info" />
-            <Typography variant="body1">Half Day</Typography>
-          </Box>
-          <Typography variant="h6" color="info.main">
-            {summary['half-day']}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1, minWidth: 150 }}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <HourglassTop color="secondary" />
-            <Typography variant="body1">Leave</Typography>
-          </Box>
-          <Typography variant="h6" color="secondary.main">
-            {summary.leave}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1, minWidth: 150 }}>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Summarize color="primary" />
-            <Typography variant="body1">Total</Typography>
-          </Box>
-          <Typography variant="h6" color="primary.main">
-            {summary.total}
-          </Typography>
-        </Paper>
-      </Box>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
+        <Grid container spacing={1} mb={2}>
+          {[
+            { icon: EventAvailable, label: 'Present', value: summary.present, color: 'success.main' },
+            { icon: EventBusy, label: 'Absent', value: summary.absent, color: 'error.main' },
+            { icon: Schedule, label: 'Late', value: summary.late, color: 'warning.main' },
+            { icon: AccessTime, label: 'Half Day', value: summary['half-day'], color: 'info.main' },
+            { icon: HourglassTop, label: 'Leave', value: summary.leave, color: 'secondary.main' },
+            { icon: Summarize, label: 'Total', value: summary.total, color: 'primary.main' }
+          ].map((item, index) => (
+            <Grid item xs={4} sm={2} key={item.label}>
+              <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}>
+                <Paper sx={{
+                  p: 1,
+                  borderRadius: 2,
+                  boxShadow: 2,
+                  bgcolor: 'background.paper',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  textAlign: 'center'
+                }}>
+                  <Box display="flex" alignItems="center" justifyContent="center" gap={0.5}>
+                    <item.icon sx={{ color: item.color, fontSize: isXs ? 16 : 20 }} />
+                    <Typography variant="caption" fontSize={isXs ? 10 : 12}>{item.label}</Typography>
+                  </Box>
+                  <Typography variant={isXs ? 'body2' : 'h6'} color={item.color} fontWeight="bold">
+                    {item.value}
+                  </Typography>
+                </Paper>
+              </motion.div>
+            </Grid>
+          ))}
+        </Grid>
+      </motion.div>
 
       {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+        <Box display="flex" justifyContent="center" alignItems="center" flexGrow={1}>
           <CircularProgress />
         </Box>
       ) : (
-        <>
-          {/* Attendance Calendar */}
-          <Paper sx={{
-            borderRadius: 2,
-            mb: 4,
-            width: '100%',
-            overflow: 'hidden',
-            boxShadow: 3
-          }}>
-            <Box sx={{
-              width: '100%',
-              overflowX: 'auto',
-              position: 'relative',
-              maxHeight: '60vh',
-              overflowY: 'auto'
-            }}>
-              <Table sx={{ minWidth: 'max-content' }}>
-                <TableHead sx={{ 
-                  position: 'sticky', 
-                  top: 0, 
-                  zIndex: 1, 
-                  bgcolor: 'background.paper',
-                  borderBottom: '2px solid',
-                  borderColor: 'divider'
-                }}>
-                  <TableRow>
-                    <TableCell sx={{
-                      minWidth: 180,
-                      position: 'sticky',
-                      left: 0,
-                      zIndex: 2,
-                      bgcolor: 'background.paper',
-                      borderRight: '1px solid',
-                      borderColor: 'divider'
-                    }}>
-                      <Typography fontWeight="bold">Employee</Typography>
-                    </TableCell>
-                    {eachDayOfInterval({
-                      start: startOfMonth(new Date(currentYear, currentMonth - 1)),
-                      end: endOfMonth(new Date(currentYear, currentMonth - 1))
-                    }).map(day => (
-                      <TableCell
-                        key={format(day, 'yyyy-MM-dd')}
-                        align="center"
-                        sx={{
-                          minWidth: 40,
-                          maxWidth: 40,
-                          width: 40,
-                          px: 0.5,
-                          py: 1,
-                          borderRight: '1px solid rgba(224, 224, 224, 0.5)',
-                          bgcolor: day.getDay() === 0 || day.getDay() === 6 ? 'rgba(0, 0, 0, 0.04)' : 'inherit'
-                        }}
-                      >
-                        <Box display="flex" flexDirection="column" alignItems="center">
-                          <Typography variant="caption" fontSize={10} color="text.secondary">
-                            {format(day, 'EEE')}
-                          </Typography>
-                          <Typography variant="body2" fontSize={12} fontWeight={isSameDay(day, new Date()) ? 'bold' : 'normal'}>
-                            {format(day, 'd')}
-                          </Typography>
-                        </Box>
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredEmployees.length > 0 ? (
-                    filteredEmployees.map(employee => (
-                      <TableRow key={employee._id} hover>
-                        <TableCell sx={{
-                          position: 'sticky',
-                          left: 0,
-                          bgcolor: 'background.paper',
-                          zIndex: 1,
-                          minWidth: 180,
-                          borderRight: '1px solid',
-                          borderColor: 'divider'
-                        }}>
-                          <Box display="flex" alignItems="center" gap={2}>
-                            <Avatar src={employee.avatar} sx={{ width: 32, height: 32 }}>
-                              {employee.name?.charAt(0)}
-                            </Avatar>
-                            <Box sx={{ overflow: 'hidden' }}>
-                              <Typography
-                                fontWeight="bold"
-                                fontSize={14}
-                                noWrap
-                              >
-                                {employee.name}
-                              </Typography>
-                              <Typography
-                                variant="body2"
-                                color="text.secondary"
-                                fontSize={12}
-                                noWrap
-                              >
-                                {employee.department}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        </TableCell>
-                        {eachDayOfInterval({
-                          start: startOfMonth(new Date(currentYear, currentMonth - 1)),
-                          end: endOfMonth(new Date(currentYear, currentMonth - 1))
-                        }).map(day => {
-                          const dateKey = format(day, 'yyyy-MM-dd');
-                          const attendance = attendanceCalendar[dateKey]?.[employee._id];
-                          return renderAttendanceCell(employee._id, dateKey, attendance);
-                        })}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={32} align="center" sx={{ py: 4 }}>
-                        <Typography variant="body1">
-                          {selectedDepartment
-                            ? `No active employees found in ${selectedDepartment} department`
-                            : 'No active employees found'}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+        <Box flexGrow={1} display="flex" flexDirection="column">
+          {/* Attendance Cards */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Box sx={{ maxHeight: { xs: '60vh', sm: '50vh', md: '40vh' }, overflowY: 'auto', mb: 2 }}>
+              {filteredEmployees.length > 0 ? (
+                filteredEmployees.slice(0, isXs ? 5 : isSm ? 8 : 10).map(employee => renderEmployeeCard(employee))
+              ) : (
+                <Typography variant="body1" textAlign="center" py={4}>
+                  {selectedDepartment
+                    ? `No active employees found in ${selectedDepartment} department`
+                    : 'No active employees found'}
+                </Typography>
+              )}
             </Box>
-          </Paper>
+          </motion.div>
 
           {/* Attendance History Section */}
-          <Box sx={{ mb: 2 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography variant="h6" gutterBottom>
-                <Box display="flex" alignItems="center" gap={1}>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.4 }}
+          >
+            <Paper sx={{ borderRadius: 2, boxShadow: 2, mb: 2 }}>
+              <Box sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                p: 1.5,
+                cursor: 'pointer'
+              }}
+              onClick={() => setShowHistory(!showHistory)}
+              >
+                <Typography variant={isXs ? 'h6' : 'h5'} display="flex" alignItems="center" gap={1}>
                   <HistoryToggleOff />
                   Attendance History
-                </Box>
-              </Typography>
-              <FormControl size="small" sx={{ minWidth: 150 }}>
-                <InputLabel>Filter Status</InputLabel>
-                <Select
-                  value={historyFilterStatus}
-                  onChange={(e) => setHistoryFilterStatus(e.target.value as AttendanceStatus | 'all')}
-                  label="Filter Status"
-                >
-                  <MenuItem value="all">All Statuses</MenuItem>
-                  <MenuItem value="present">Present</MenuItem>
-                  <MenuItem value="absent">Absent</MenuItem>
-                  <MenuItem value="late">Late</MenuItem>
-                  <MenuItem value="half-day">Half Day</MenuItem>
-                  <MenuItem value="leave">Leave</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-            
-            <Paper sx={{ overflow: 'auto', borderRadius: 2, boxShadow: 3 }}>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>
-                      <TableSortLabel
-                        active={historySortField === 'employeeName'}
-                        direction={historySortDirection}
-                        onClick={() => handleHistorySort('employeeName')}
-                      >
-                        Employee
-                        {historySortField === 'employeeName' && (
-                          historySortDirection === 'asc' ? <ArrowDropUp /> : <ArrowDropDown />
+                </Typography>
+                <ExpandMore sx={{ transform: showHistory ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+              </Box>
+              <Collapse in={showHistory}>
+                <Divider />
+                <Box sx={{ p: 1.5 }}>
+                  <FormControl size="small" sx={{ minWidth: { xs: 100, sm: 150 }, mb: 1 }}>
+                    <InputLabel>Filter Status</InputLabel>
+                    <Select
+                      value={historyFilterStatus}
+                      onChange={(e) => setHistoryFilterStatus(e.target.value as AttendanceStatus | 'all')}
+                      label="Filter Status"
+                    >
+                      <MenuItem value="all">All Statuses</MenuItem>
+                      <MenuItem value="present">Present</MenuItem>
+                      <MenuItem value="absent">Absent</MenuItem>
+                      <MenuItem value="late">Late</MenuItem>
+                      <MenuItem value="half-day">Half Day</MenuItem>
+                      <MenuItem value="leave">Leave</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>
+                          <TableSortLabel
+                            active={historySortField === 'employeeName'}
+                            direction={historySortDirection}
+                            onClick={() => handleHistorySort('employeeName')}
+                          >
+                            Employee
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell>
+                          <TableSortLabel
+                            active={historySortField === 'date'}
+                            direction={historySortDirection}
+                            onClick={() => handleHistorySort('date')}
+                          >
+                            Date
+                          </TableSortLabel>
+                        </TableCell>
+                        {!isXs && (
+                          <>
+                            <TableCell>Status</TableCell>
+                            <TableCell>Check In</TableCell>
+                            <TableCell>Check Out</TableCell>
+                          </>
                         )}
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={historySortField === 'date'}
-                        direction={historySortDirection}
-                        onClick={() => handleHistorySort('date')}
-                      >
-                        Date
-                        {historySortField === 'date' && (
-                          historySortDirection === 'asc' ? <ArrowDropUp /> : <ArrowDropDown />
-                        )}
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={historySortField === 'checkIn'}
-                        direction={historySortDirection}
-                        onClick={() => handleHistorySort('checkIn')}
-                      >
-                        Check In
-                        {historySortField === 'checkIn' && (
-                          historySortDirection === 'asc' ? <ArrowDropUp /> : <ArrowDropDown />
-                        )}
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={historySortField === 'checkOut'}
-                        direction={historySortDirection}
-                        onClick={() => handleHistorySort('checkOut')}
-                      >
-                        Check Out
-                        {historySortField === 'checkOut' && (
-                          historySortDirection === 'asc' ? <ArrowDropUp /> : <ArrowDropDown />
-                        )}
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>Notes</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {filteredHistory
-                    .slice(historyPage * historyRowsPerPage, historyPage * historyRowsPerPage + historyRowsPerPage)
-                    .map((attendance: Attendance) => (
-                      <TableRow key={attendance._id} hover>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={2}>
-                            <Avatar>
-                              {attendance.employeeName?.charAt(0) || '?'}
-                            </Avatar>
-                            <Typography fontWeight="bold">
-                              {attendance.employeeName || 'Unknown'}
-                            </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Tooltip title={format(new Date(attendance.date), 'EEEE, MMMM d, yyyy')} arrow>
-                            <span>{format(new Date(attendance.date), 'MM/dd/yyyy')}</span>
-                          </Tooltip>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={attendance.status}
-                            color={
-                              attendance.status === 'present' ? 'success' :
-                              attendance.status === 'absent' ? 'error' :
-                              attendance.status === 'late' ? 'warning' :
-                              attendance.status === 'half-day' ? 'info' :
-                              'secondary'
-                            }
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontWeight: 'bold' }}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {attendance.checkIn ? (
-                            <Tooltip title={`Recorded at ${format(new Date(attendance.checkIn), 'h:mm a')}`} arrow>
-                              <span>{format(new Date(attendance.checkIn), 'HH:mm')}</span>
-                            </Tooltip>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell>
-                          {attendance.checkOut ? (
-                            <Tooltip title={`Recorded at ${format(new Date(attendance.checkOut), 'h:mm a')}`} arrow>
-                              <span>{format(new Date(attendance.checkOut), 'HH:mm')}</span>
-                            </Tooltip>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell sx={{ maxWidth: 200 }}>
-                          <Tooltip title={attendance.notes || 'No notes'} arrow>
-                            <Typography noWrap sx={{ maxWidth: '100%' }}>
-                              {attendance.notes || '-'}
-                            </Typography>
-                          </Tooltip>
-                        </TableCell>
-                        <TableCell>
-                          <Box display="flex" gap={1}>
-                            <Tooltip title="Edit" arrow>
-                              <IconButton
-                                onClick={() => editAttendance(attendance)}
-                                color="primary"
-                                size="small"
-                              >
-                                <Edit fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete" arrow>
-                              <IconButton
-                                onClick={() => deleteAttendance(attendance._id)}
-                                color="error"
-                                size="small"
-                              >
-                                <Delete fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
-                        </TableCell>
+                        <TableCell>Actions</TableCell>
                       </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-              <TablePagination
-                rowsPerPageOptions={[5, 10, 25]}
-                component="div"
-                count={filteredHistory.length}
-                rowsPerPage={historyRowsPerPage}
-                page={historyPage}
-                onPageChange={handleChangeHistoryPage}
-                onRowsPerPageChange={handleChangeHistoryRowsPerPage}
-                sx={{ borderTop: '1px solid rgba(224, 224, 224, 1)' }}
-              />
+                    </TableHead>
+                    <TableBody>
+                      {filteredHistory
+                        .slice(historyPage * historyRowsPerPage, historyPage * historyRowsPerPage + historyRowsPerPage)
+                        .map((attendance: Attendance) => (
+                          <TableRow key={attendance._id} hover>
+                            <TableCell>
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <Avatar sx={{ width: isXs ? 24 : 32, height: isXs ? 24 : 32 }}>
+                                  {attendance.employeeName?.charAt(0) || '?'}
+                                </Avatar>
+                                <Typography variant={isXs ? 'caption' : 'body2'} fontWeight="bold">
+                                  {attendance.employeeName || 'Unknown'}
+                                </Typography>
+                              </Box>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant={isXs ? 'caption' : 'body2'}>
+                                {format(new Date(attendance.date), 'MM/dd/yy')}
+                              </Typography>
+                            </TableCell>
+                            {!isXs && (
+                              <>
+                                <TableCell>
+                                  <Chip
+                                    label={attendance.status}
+                                    color={
+                                      attendance.status === 'present' ? 'success' :
+                                      attendance.status === 'absent' ? 'error' :
+                                      attendance.status === 'late' ? 'warning' :
+                                      attendance.status === 'half-day' ? 'info' :
+                                      'secondary'
+                                    }
+                                    size="small"
+                                    variant="outlined"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2">
+                                    {attendance.checkIn ? format(new Date(attendance.checkIn), 'HH:mm') : '-'}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="body2">
+                                    {attendance.checkOut ? format(new Date(attendance.checkOut), 'HH:mm') : '-'}
+                                  </Typography>
+                                </TableCell>
+                              </>
+                            )}
+                            <TableCell>
+                              <Box display="flex" gap={0.5}>
+                                <IconButton
+                                  onClick={() => editAttendance(attendance)}
+                                  color="primary"
+                                  size="small"
+                                  sx={{ minWidth: 44, minHeight: 44 }}
+                                >
+                                  <Edit fontSize="small" />
+                                </IconButton>
+                                <IconButton
+                                  onClick={() => deleteAttendance(attendance._id)}
+                                  color="error"
+                                  size="small"
+                                  sx={{ minWidth: 44, minHeight: 44 }}
+                                >
+                                  <Delete fontSize="small" />
+                                </IconButton>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                  <TablePagination
+                    rowsPerPageOptions={[5, 10]}
+                    component="div"
+                    count={filteredHistory.length}
+                    rowsPerPage={historyRowsPerPage}
+                    page={historyPage}
+                    onPageChange={handleChangeHistoryPage}
+                    onRowsPerPageChange={handleChangeHistoryRowsPerPage}
+                    sx={{ borderTop: '1px solid rgba(224, 224, 224, 1)' }}
+                  />
+                </Box>
+              </Collapse>
             </Paper>
-          </Box>
-        </>
+          </motion.div>
+        </Box>
       )}
 
       {/* Single Attendance Dialog */}
@@ -883,40 +771,51 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
         maxWidth="sm"
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: 3
-          }
+          sx: { borderRadius: 3, boxShadow: 6 }
         }}
+        // TransitionComponent={motion.div}
+        transitionDuration={300}
       >
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+        <DialogTitle sx={{
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+          py: 2,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
+          <CalendarToday />
           {editingAttendanceId ? 'Edit Attendance' : 'Add Attendance'} Record
         </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
-          <Autocomplete
-            options={filteredEmployees}
-            getOptionLabel={(option) => `${option.name} (${option.position})`}
-            onChange={(e, value) => {
-              setSelectedEmployee(value?._id || '');
-              setAttendanceForm(prev => ({
-                ...prev,
-                employeeName: value?.name || ''
-              }));
-            }}
-            value={filteredEmployees.find(emp => emp._id === selectedEmployee) || null}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                margin="normal"
-                label="Employee"
-                required
-                fullWidth
+        <DialogContent sx={{ pt: 2, pb: 1 }}>
+          <Grid container spacing={1.5}>
+            <Grid item xs={12}>
+              <Autocomplete
+                options={filteredEmployees}
+                getOptionLabel={(option) => `${option.name} (${option.position})`}
+                onChange={(e, value) => {
+                  setSelectedEmployee(value?._id || '');
+                  setAttendanceForm(prev => ({
+                    ...prev,
+                    employeeName: value?.name || ''
+                  }));
+                }}
+                value={filteredEmployees.find(emp => emp._id === selectedEmployee) || null}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    margin="dense"
+                    label="Employee"
+                    required
+                    fullWidth
+                    variant="outlined"
+                  />
+                )}
               />
-            )}
-          />
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Date"
                 type="date"
@@ -924,10 +823,11 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 onChange={(e) => setAttendanceForm(prev => ({ ...prev, date: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
                 required
+                variant="outlined"
               />
             </Grid>
-            <Grid item xs={6}>
-              <FormControl fullWidth margin="normal">
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth margin="dense">
                 <InputLabel>Status</InputLabel>
                 <Select
                   value={attendanceForm.status}
@@ -946,9 +846,9 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Check In"
                 type="time"
@@ -956,11 +856,12 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 onChange={(e) => setAttendanceForm(prev => ({ ...prev, checkIn: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
                 required={attendanceForm.status === 'present' || attendanceForm.status === 'late'}
+                variant="outlined"
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Check Out"
                 type="time"
@@ -968,28 +869,36 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 onChange={(e) => setAttendanceForm(prev => ({ ...prev, checkOut: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
                 required={attendanceForm.status === 'present' || attendanceForm.status === 'half-day'}
+                variant="outlined"
               />
             </Grid>
             <Grid item xs={12}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Notes"
                 value={attendanceForm.notes}
                 onChange={(e) => setAttendanceForm(prev => ({ ...prev, notes: e.target.value }))}
                 multiline
-                rows={3}
+                rows={2}
+                variant="outlined"
               />
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={resetAttendanceForm} variant="outlined">Cancel</Button>
+        <DialogActions sx={{ p: 1.5, bgcolor: 'background.paper' }}>
+          <Button
+            onClick={resetAttendanceForm}
+            variant="outlined"
+            sx={{ minWidth: 100, height: 44, borderRadius: 2 }}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleAttendanceSubmit}
             variant="contained"
             disabled={!selectedEmployee}
-            sx={{ ml: 1 }}
+            sx={{ minWidth: 100, height: 44, borderRadius: 2 }}
           >
             Save
           </Button>
@@ -1000,19 +909,27 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
       <Dialog
         open={openBulkAttendanceDialog}
         onClose={resetBulkAttendanceForm}
-        maxWidth="md"
+        maxWidth="sm"
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: 3
-          }
+          sx: { borderRadius: 3, boxShadow: 6 }
         }}
+        // TransitionComponent={motion.div}
+        transitionDuration={300}
       >
-        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+        <DialogTitle sx={{
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+          py: 2,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1
+        }}>
+          <GroupAdd />
           Bulk Attendance Recording
         </DialogTitle>
-        <DialogContent sx={{ pt: 3 }}>
-          <Grid container spacing={2}>
+        <DialogContent sx={{ pt: 2, pb: 1 }}>
+          <Grid container spacing={1.5}>
             <Grid item xs={12}>
               <FormControlLabel
                 control={
@@ -1038,21 +955,22 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      margin="normal"
+                      margin="dense"
                       label="Select Employees"
                       placeholder="Search employees..."
                       fullWidth
+                      variant="outlined"
                     />
                   )}
                   renderOption={(props, option) => (
                     <li {...props} key={option._id}>
-                      <Box display="flex" alignItems="center" gap={2}>
-                        <Avatar src={option.avatar} sx={{ width: 32, height: 32 }}>
+                      <Box display="flex" alignItems="center" gap={1}>
+                        <Avatar src={option.avatar} sx={{ width: isXs ? 24 : 32, height: isXs ? 24 : 32 }}>
                           {option.name?.charAt(0)}
                         </Avatar>
                         <Box>
-                          <Typography>{option.name}</Typography>
-                          <Typography variant="body2" color="text.secondary">
+                          <Typography variant={isXs ? 'caption' : 'body2'}>{option.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
                             {option.position} • {option.department}
                           </Typography>
                         </Box>
@@ -1062,9 +980,9 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 />
               </Grid>
             )}
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Date"
                 type="date"
@@ -1075,10 +993,11 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 }))}
                 InputLabelProps={{ shrink: true }}
                 required
+                variant="outlined"
               />
             </Grid>
-            <Grid item xs={6}>
-              <FormControl fullWidth margin="normal">
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth margin="dense">
                 <InputLabel>Status</InputLabel>
                 <Select
                   value={bulkAttendanceForm.status}
@@ -1097,9 +1016,9 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Check In"
                 type="time"
@@ -1110,11 +1029,12 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 }))}
                 InputLabelProps={{ shrink: true }}
                 required={bulkAttendanceForm.status === 'present' || bulkAttendanceForm.status === 'late'}
+                variant="outlined"
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} sm={6}>
               <TextField
-                margin="normal"
+                margin="dense"
                 fullWidth
                 label="Check Out"
                 type="time"
@@ -1125,17 +1045,24 @@ const AttendanceTrackingTab: React.FC<AttendanceTrackingTabProps> = ({
                 }))}
                 InputLabelProps={{ shrink: true }}
                 required={bulkAttendanceForm.status === 'present' || bulkAttendanceForm.status === 'half-day'}
+                variant="outlined"
               />
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          <Button onClick={resetBulkAttendanceForm} variant="outlined">Cancel</Button>
+        <DialogActions sx={{ p: 1.5, bgcolor: 'background.paper' }}>
+          <Button
+            onClick={resetBulkAttendanceForm}
+            variant="outlined"
+            sx={{ minWidth: 100, height: 44, borderRadius: 2 }}
+          >
+            Cancel
+          </Button>
           <Button
             onClick={handleBulkAttendanceSubmit}
             variant="contained"
             disabled={!bulkAttendanceForm.applyToAll && selectedEmployees.length === 0}
-            sx={{ ml: 1 }}
+            sx={{ minWidth: 100, height: 44, borderRadius: 2 }}
           >
             Save Bulk Records
           </Button>

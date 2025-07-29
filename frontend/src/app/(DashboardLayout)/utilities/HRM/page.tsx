@@ -281,7 +281,7 @@ const HRMPage = () => {
               lineHeight: 1.2
             }}
           >
-            HR Management
+            HRM Management
           </Typography>
         </Box>
 
