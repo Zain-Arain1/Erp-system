@@ -32,6 +32,7 @@ interface AttendanceTrackingTabProps {
   selectedEmployees: string[];
   setSelectedEmployees: (ids: string[]) => void;
   handleExport: (type: 'employees' | 'salaries' | 'advances' | 'attendances') => Promise<void>;
+     isMobile: boolean;
 }
 
 const api = axios.create({

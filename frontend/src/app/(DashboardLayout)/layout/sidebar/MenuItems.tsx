@@ -159,6 +159,31 @@ const menuCategories: MenuCategory[] = [
     paths: ["/utilities/expenses", "/utilities/HRM"]
   },
   {
+    name: "Reports",
+    icon: IconWallet,
+    items: [
+      {
+        id: uniqueId(),
+        title: "Inventory Report",
+        icon: IconUsersGroup,
+        href: "/utilities/inventroyreport",
+        priority: true,
+        disabled: false,
+        external: false,
+      },
+      {
+        id: uniqueId(),
+        title: "Purchase Report",
+        icon: IconUsersGroup,
+        href: "/utilities/purchasereport",
+        priority: true,
+        disabled: false,
+        external: false,
+      }
+    ],
+    paths: ["/utilities/inventoryreport", "/utilities/purchasereport"]
+  },
+  {
     name: "Auth",
     icon: IconLock,
     items: [

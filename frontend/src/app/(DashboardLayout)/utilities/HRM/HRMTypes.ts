@@ -76,4 +76,4 @@ export interface Attendance {
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
-}
+} 

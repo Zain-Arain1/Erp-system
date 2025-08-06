@@ -1,11 +1,13 @@
 
 import React from 'react'
-import CustomerSection from './vendorSection'
+
+import VendorSection from './vendorSection'
 
 export default function page() {
   return (
     <>
-<CustomerSection/>
+
+<VendorSection/>
     </>
   )
 }

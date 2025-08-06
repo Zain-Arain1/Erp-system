@@ -5,7 +5,7 @@ to refresh the ledger, print the ledger statement, and export the ledger as a PD
 includes a table to display ledger entries, filters for search, date range, and type, as well as a
 modal to view detailed information about individual invoices. */
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   Box,
@@ -127,22 +127,8 @@ const CustomerLedger = () => {
   const totalDebit = filteredEntries.reduce((sum, entry) => sum + entry.debit, 0);
   const totalCredit = filteredEntries.reduce((sum, entry) => sum + entry.credit, 0);
 
-  // Load customer data and prepare ledger entries
-  useEffect(() => {
-    if (!customerId || !customers.length || invoicesLoading) return;
-
-    const foundCustomer = customers.find(c => c.id === customerId);
-
-    if (!foundCustomer) {
-      router.push("/utilities/customer");
-      return;
-    }
-
-    setCustomer(foundCustomer);
-    prepareLedgerEntries(foundCustomer.id);
-  }, [customerId, customers, invoices, invoicesLoading]);
-
-  const prepareLedgerEntries = (customerId: string) => {
+  // Prepare ledger entries with useCallback to prevent unnecessary recreations
+  const prepareLedgerEntries = useCallback((customerId: string) => {
     setIsLoading(true);
 
     try {
@@ -237,7 +223,22 @@ const CustomerLedger = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [invoices]);
+
+  // Load customer data and prepare ledger entries
+  useEffect(() => {
+    if (!customerId || !customers.length || invoicesLoading) return;
+
+    const foundCustomer = customers.find(c => c.id === customerId);
+
+    if (!foundCustomer) {
+      router.push("/utilities/customer");
+      return;
+    }
+
+    setCustomer(foundCustomer);
+    prepareLedgerEntries(foundCustomer.id);
+  }, [customerId, customers, invoicesLoading, prepareLedgerEntries, router]);
 
   // Apply all filters (search, date range, type)
   useEffect(() => {
@@ -272,6 +273,7 @@ const CustomerLedger = () => {
     setPage(0);
   }, [searchTerm, ledgerEntries, dateRange, filterType]);
 
+  // Rest of the component remains the same...
   const handleDateRangeChange = (type: "start" | "end", value: Date | null) => {
     setDateRange(prev => ({
       ...prev,

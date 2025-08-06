@@ -23,21 +23,28 @@ exports.createVendor = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
+// In vendorController.js
 exports.getVendors = async (req, res) => {
   try {
-    // Disable caching
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
-    console.log(`Processing vendors request ${req.requestId}`);
+    const vendors = await Vendor.find().sort({ createdAt: -1 }).lean();
     
-    const vendors = await Vendor.find().sort({ createdAt: -1 });
-    res.json(vendors);
+    // Explicitly transform the data
+    const response = vendors.map(v => ({
+      id: v._id.toString(), // Explicitly convert to string
+      name: v.name,
+      email: v.email,
+      phone: v.phone,
+      address: v.address,
+      status: v.status,
+      company: v.company || '',
+      createdAt: v.createdAt,
+      updatedAt: v.updatedAt
+    }));
+    
+    res.json(response);
   } catch (error) {
-    console.error(`Error in getVendors ${req.requestId}:`, error);
-    res.status(500).json({ error: error.message });
+    console.error('Error in getVendors:', error);
+    res.status(500).json({ error: 'Failed to fetch vendors' });
   }
 };
 

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   Paper,
@@ -33,15 +33,12 @@ import {
   Grid,
   Card,
   CardContent,
-  CardActionArea,
   Pagination,
-  Badge,
 } from "@mui/material";
 import {
   Add as AddIcon,
   MoreVert as MoreVertIcon,
   Search as SearchIcon,
-  FilterList as FilterListIcon,
   Refresh as RefreshIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -59,17 +56,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { alpha } from "@mui/material/styles";
 import AddVendorForm from "./AddVendorform";
-import { useVendorContext } from "@/app/(DashboardLayout)/utilities/context/vendorContext";
-
-interface Vendor {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  status: "Active" | "Inactive";
-  company?: string;
-}
+import { useVendorContext, Vendor } from "@/app/(DashboardLayout)/utilities/context/vendorContext";
 
 interface Column {
   id: keyof Vendor | "action" | "ledger" | "number";
@@ -77,69 +64,26 @@ interface Column {
   minWidth?: number;
   align?: "right" | "left" | "center";
   sortable?: boolean;
-  icon?: React.ReactElement; // Change from ReactNode to ReactElement
+  icon?: React.ReactElement;
 }
-
-const columns: Column[] = [
-  { id: "number", label: "#", minWidth: 50, align: "left" },
-  {
-    id: "name",
-    label: "Vendor Name",
-    minWidth: 150,
-    align: "left",
-    sortable: true,
-    icon: <AccountCircleIcon fontSize="small" />
-  },
-  {
-    id: "company",
-    label: "Company",
-    minWidth: 150,
-    align: "left",
-    sortable: true,
-    icon: <BusinessIcon fontSize="small" />
-  },
-  {
-    id: "email",
-    label: "Email",
-    minWidth: 150,
-    align: "left",
-    sortable: true,
-    icon: <EmailIcon fontSize="small" />
-  },
-  {
-    id: "phone",
-    label: "Phone",
-    minWidth: 120,
-    align: "left",
-    icon: <PhoneIcon fontSize="small" />
-  },
-  {
-    id: "address",
-    label: "Address",
-    minWidth: 160,
-    align: "left",
-    icon: <LocationOnIcon fontSize="small" />
-  },
-  {
-    id: "status",
-    label: "Status",
-    minWidth: 100,
-    align: "center",
-    icon: <CheckCircleIcon fontSize="small" />
-  },
-  { id: "action", label: "Actions", minWidth: 40, align: "center" },
-  {
-    id: "ledger",
-    label: "Ledger",
-    minWidth: 140,
-    align: "center",
-    icon: <ReceiptIcon fontSize="small" />
-  },
-];
 
 const VendorSection = () => {
   const router = useRouter();
-  const { vendors, addVendor, updateVendor, deleteVendor, isLoading, error, refreshVendors } = useVendorContext();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
+  const { 
+    vendors, 
+    addVendor, 
+    updateVendor, 
+    deleteVendor, 
+    isLoading, 
+    error, 
+    refreshVendors,
+    lastRefresh 
+  } = useVendorContext();
+  
+  // State declarations
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [showForm, setShowForm] = useState(false);
@@ -157,9 +101,62 @@ const VendorSection = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
 
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const isTablet = useMediaQuery(theme.breakpoints.between("sm", "md"));
+  const columns: Column[] = useMemo(() => [
+    { id: "number", label: "#", minWidth: 50, align: "left" },
+    {
+      id: "name",
+      label: "Vendor Name",
+      minWidth: 150,
+      align: "left",
+      sortable: true,
+      icon: <AccountCircleIcon fontSize="small" />
+    },
+    {
+      id: "company",
+      label: "Company",
+      minWidth: 150,
+      align: "left",
+      sortable: true,
+      icon: <BusinessIcon fontSize="small" />
+    },
+    {
+      id: "email",
+      label: "Email",
+      minWidth: 150,
+      align: "left",
+      sortable: true,
+      icon: <EmailIcon fontSize="small" />
+    },
+    {
+      id: "phone",
+      label: "Phone",
+      minWidth: 120,
+      align: "left",
+      icon: <PhoneIcon fontSize="small" />
+    },
+    {
+      id: "address",
+      label: "Address",
+      minWidth: 160,
+      align: "left",
+      icon: <LocationOnIcon fontSize="small" />
+    },
+    {
+      id: "status",
+      label: "Status",
+      minWidth: 100,
+      align: "center",
+      icon: <CheckCircleIcon fontSize="small" />
+    },
+    { id: "action", label: "Actions", minWidth: 40, align: "center" },
+    {
+      id: "ledger",
+      label: "Ledger",
+      minWidth: 140,
+      align: "center",
+      icon: <ReceiptIcon fontSize="small" />
+    },
+  ], []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -168,32 +165,56 @@ const VendorSection = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Automatically switch to grid view on mobile
   useEffect(() => {
     if (isMobile) {
       setViewMode("grid");
     }
   }, [isMobile]);
 
+  const handleRefresh = useCallback(async () => {
+    try {
+      await refreshVendors();
+      setSnackbar({
+        open: true,
+        message: "Vendors refreshed successfully!",
+        severity: "success",
+      });
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.message || "Failed to refresh vendors",
+        severity: "error",
+      });
+    }
+  }, [refreshVendors]);
+
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      handleRefresh();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [handleRefresh]);
+
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(10);
+    setRowsPerPage(+event.target.value);
     setPage(0);
   };
 
-  const checkDuplicateVendor = (vendor: Vendor): boolean => {
+  const checkDuplicateVendor = useCallback((vendor: Vendor): boolean => {
     return vendors.some(
       (v) =>
         (v.phone === vendor.phone && v.id !== vendor.id) ||
         (v.email.toLowerCase() === vendor.email.toLowerCase() && v.id !== vendor.id) ||
         (v.name.toLowerCase() === vendor.name.toLowerCase() && v.id !== vendor.id)
     );
-  };
+  }, [vendors]);
 
-  const handleFormSubmit = async (vendor: Vendor): Promise<void> => {
+  const handleFormSubmit = useCallback(async (vendor: Vendor): Promise<void> => {
     try {
       if (!editVendor && checkDuplicateVendor(vendor)) {
         setSnackbar({
@@ -223,7 +244,6 @@ const VendorSection = () => {
 
       setShowForm(false);
       setEditVendor(null);
-      setTimeout(() => refreshVendors(), 500);
     } catch (error: any) {
       setSnackbar({
         open: true,
@@ -231,36 +251,36 @@ const VendorSection = () => {
         severity: "error",
       });
     }
-  };
+  }, [editVendor, checkDuplicateVendor, updateVendor, addVendor]);
 
-  const handleFormCancel = () => {
+  const handleFormCancel = useCallback(() => {
     setShowForm(false);
     setEditVendor(null);
-  };
+  }, []);
 
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
+  const handleCloseSnackbar = useCallback(() => {
+    setSnackbar(prev => ({ ...prev, open: false }));
+  }, []);
 
-  const handleMenuClick = (event: React.MouseEvent<HTMLElement>, vendor: Vendor) => {
+  const handleMenuClick = useCallback((event: React.MouseEvent<HTMLElement>, vendor: Vendor) => {
     setAnchorEl(event.currentTarget);
     setSelectedVendor(vendor);
-  };
+  }, []);
 
-  const handleMenuClose = () => {
+  const handleMenuClose = useCallback(() => {
     setAnchorEl(null);
     setSelectedVendor(null);
-  };
+  }, []);
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     if (selectedVendor) {
       setEditVendor(selectedVendor);
       setShowForm(true);
     }
     handleMenuClose();
-  };
+  }, [selectedVendor, handleMenuClose]);
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (selectedVendor) {
       try {
         await deleteVendor(selectedVendor.id);
@@ -278,30 +298,13 @@ const VendorSection = () => {
       }
     }
     handleMenuClose();
-  };
+  }, [selectedVendor, deleteVendor, handleMenuClose]);
 
-  const handleLedgerClick = (vendor: Vendor) => {
+  const handleLedgerClick = useCallback((vendor: Vendor) => {
     router.push(`/utilities/vendor/ledger/${vendor.id}`);
-  };
+  }, [router]);
 
-  const handleRefresh = async () => {
-    try {
-      await refreshVendors();
-      setSnackbar({
-        open: true,
-        message: "Vendors refreshed successfully!",
-        severity: "success",
-      });
-    } catch (error: any) {
-      setSnackbar({
-        open: true,
-        message: error.message || "Failed to refresh vendors",
-        severity: "error",
-      });
-    }
-  };
-
-  const filteredVendors = vendors.filter((vendor) => {
+  const filteredVendors = useMemo(() => vendors.filter((vendor) => {
     const matchesSearch =
       vendor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       vendor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -309,9 +312,9 @@ const VendorSection = () => {
       (vendor.company && vendor.company.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === "All" || vendor.status === statusFilter;
     return matchesSearch && matchesStatus;
-  });
+  }), [vendors, searchTerm, statusFilter]);
 
-  const sortedVendors = React.useMemo(() => {
+  const sortedVendors = useMemo(() => {
     let result = [...filteredVendors];
 
     if (sortConfig !== null) {
@@ -333,15 +336,15 @@ const VendorSection = () => {
     return result;
   }, [filteredVendors, sortConfig]);
 
-  const handleSort = (key: keyof Vendor) => {
+  const handleSort = useCallback((key: keyof Vendor) => {
     let direction: "asc" | "desc" = "asc";
     if (sortConfig && sortConfig.key === key && sortConfig.direction === "asc") {
       direction = "desc";
     }
     setSortConfig({ key, direction });
-  };
+  }, [sortConfig]);
 
-  const renderCellContent = (value: string, column: Column) => {
+  const renderCellContent = useCallback((value: string, column: Column) => {
     const maxLength = column.minWidth ? column.minWidth / 10 : 20;
     const shouldTruncate = value && value.length > maxLength;
 
@@ -361,9 +364,9 @@ const VendorSection = () => {
         </Typography>
       </Tooltip>
     );
-  };
+  }, []);
 
-  const renderLoadingRows = () => {
+  const renderLoadingRows = useCallback(() => {
     return Array.from({ length: rowsPerPage }).map((_, index) => (
       <TableRow key={`skeleton-${index}`}>
         {columns.map((column) => (
@@ -373,9 +376,9 @@ const VendorSection = () => {
         ))}
       </TableRow>
     ));
-  };
+  }, [rowsPerPage, columns]);
 
-  const renderLoadingCards = () => {
+  const renderLoadingCards = useCallback(() => {
     return Array.from({ length: 6 }).map((_, index) => (
       <Grid item xs={12} sm={6} md={4} key={`card-skeleton-${index}`}>
         <Card sx={{ height: '100%' }}>
@@ -394,9 +397,9 @@ const VendorSection = () => {
         </Card>
       </Grid>
     ));
-  };
+  }, []);
 
-  const renderVendorCard = (vendor: Vendor, index: number) => {
+  const renderVendorCard = useCallback((vendor: Vendor) => {
     return (
       <Grid item xs={12} sm={6} md={4} key={vendor.id}>
         <Card sx={{
@@ -507,7 +510,37 @@ const VendorSection = () => {
         </Card>
       </Grid>
     );
-  };
+  }, [handleLedgerClick, handleMenuClick, theme]);
+
+  if (error) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Error loading vendors: {error}
+        </Alert>
+        <Button 
+          variant="contained" 
+          onClick={handleRefresh}
+          startIcon={<RefreshIcon />}
+        >
+          Retry
+        </Button>
+      </Box>
+    );
+  }
+
+  if (isLoading && isInitialLoad) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '300px' 
+      }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{
@@ -661,16 +694,7 @@ const VendorSection = () => {
         </Stack>
       </Paper>
 
-      {isInitialLoad ? (
-        <Box sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '300px',
-        }}>
-          <CircularProgress size={60} thickness={4} />
-        </Box>
-      ) : vendors.length === 0 ? (
+      {vendors.length === 0 && !isLoading ? (
         <Paper sx={{
           p: 4,
           display: 'flex',
@@ -698,10 +722,9 @@ const VendorSection = () => {
           <Typography variant="h5" gutterBottom sx={{ mb: 2, fontWeight: 600 }}>
             No Vendors Found
           </Typography>
-        <Typography variant="body1" color="textSecondary" sx={{ mb: 3, maxWidth: '400px' }}>
-  You don&apos;t have any vendors yet. Click the button below to add your first vendor.
-</Typography>
-
+          <Typography variant="body1" color="textSecondary" sx={{ mb: 3, maxWidth: '400px' }}>
+            You don&apos;t have any vendors yet. Click the button below to add your first vendor.
+          </Typography>
 
           <Button
             variant="contained"
@@ -755,7 +778,7 @@ const VendorSection = () => {
                           {column.icon && React.isValidElement(column.icon) &&
                             React.cloneElement(column.icon, {
                               sx: { fontSize: '1rem' },
-                              fontSize: 'inherit', // This is the proper way to set icon size in MUI
+                              fontSize: 'inherit',
                             } as React.HTMLAttributes<HTMLElement>)}
                           <span>{column.label}</span>
                           {sortConfig?.key === column.id && (
@@ -892,8 +915,8 @@ const VendorSection = () => {
           ) : (
             sortedVendors
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map((vendor, index) => renderVendorCard(vendor, index))
-          )}
+              .map((vendor) => renderVendorCard(vendor)))
+          }
 
           <Grid item xs={12}>
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>

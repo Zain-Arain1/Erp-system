@@ -16,19 +16,25 @@ const AppError = require('./utils/appError');
 const globalErrorHandler = require('./controllers/errorController');
 const expenseRoutes = require('./routes/expenseRoute');
 const hrmRoutes = require('./routes/HRMRoutes');
+const RawproductRoutes = require('./routes/RawproductRoutes');
 
 const app = express();
 
 // ✅ Fixed CORS setup
+// Update your CORS options in server.js
 const corsOptions = {
   origin: ['http://localhost:3000', process.env.FRONTEND_URL],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'Pragma'],
   credentials: true,
   preflightContinue: false,
   optionsSuccessStatus: 204
 };
 
+app.use((req, res, next) => {
+  console.log(`CORS: Handling ${req.method} request to ${req.originalUrl} from ${req.get('Origin')}`);
+  next();
+});
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // Optional but safe
 
@@ -50,7 +56,7 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/hrm', hrmRoutes);
-
+app.use('/api/raw-products', RawproductRoutes);
 // Global error handler
 app.use(globalErrorHandler);
 

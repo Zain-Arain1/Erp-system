@@ -11,7 +11,7 @@ import { Autocomplete } from '@mui/material';
 import {
   Add, Edit, Delete, Email, Phone, Search, CloudDownload, Info, Person, MoreVert
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants  } from 'framer-motion';
 import axios from 'axios';
 import { format, isValid } from 'date-fns';
 import { Employee } from './HRMTypes';
@@ -69,9 +69,9 @@ const StyledCard = styled(Card)(({ theme }) => ({
 }));
 
 interface Filters {
-  department?: string;
-  status?: 'active' | 'inactive';
-  [key: string]: any;
+  department: string;
+  status: string;
+  dateRange: { start: Date | null; end: Date | null };
 }
 
 interface EmployeesTabProps {
@@ -81,7 +81,10 @@ interface EmployeesTabProps {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
   filters: Filters;
-  setFilters: (filters: Filters) => void;
+    setFilters: React.Dispatch<React.SetStateAction<Filters>>;
+      openHistoryDialog: boolean;
+  setOpenHistoryDialog: (open: boolean) => void;
+  setSelectedHistoryEmployee: (id: string) => void;
   sortBy: string;
   sortDirection: 'asc' | 'desc';
   handleSort: (column: string) => void;
@@ -93,6 +96,7 @@ interface EmployeesTabProps {
   rowsPerPage?: number;
   handleExport: (type: "employees" | "salaries" | "advances" | "attendances") => Promise<void>;
   onNotify: (message: string, severity: 'error' | 'warning' | 'info' | 'success') => void;
+   isMobile: boolean;
 }
 
 export const EmployeesTab: React.FC<EmployeesTabProps> = ({
@@ -113,7 +117,8 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
   filteredData,
   rowsPerPage = ROWS_PER_PAGE,
   handleExport,
-  onNotify
+  onNotify,
+  
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -446,12 +451,12 @@ export const EmployeesTab: React.FC<EmployeesTabProps> = ({
   const columns = isMobile ? mobileColumns : isTablet ? tabletColumns : desktopColumns;
 
   // Animation variants
-  const cardVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
-    exit: { opacity: 0, y: -20, transition: { duration: 0.2 } },
-    hover: { scale: 1.02, transition: { duration: 0.2 } }
-  };
+ const cardVariants: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+  exit: { opacity: 0, y: -20, transition: { duration: 0.2 } },
+  hover: { scale: 1.02, transition: { duration: 0.2 } }
+};
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>

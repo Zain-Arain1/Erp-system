@@ -101,7 +101,7 @@ const VendorLedger = () => {
 
     setVendor(foundVendor);
     prepareLedgerEntries(foundVendor.id);
-  }, [vendorId, vendors]);
+  }, [vendorId, vendors, router]); // Added router to dependency array
 
   const prepareLedgerEntries = async (vendorId: string) => {
     setIsLoading(true);

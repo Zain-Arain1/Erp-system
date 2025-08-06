@@ -28,6 +28,7 @@ interface AdvanceManagementTabProps {
   setOpenHistoryDialog: React.Dispatch<React.SetStateAction<boolean>>;
   selectedHistoryEmployee: string;
   setSelectedHistoryEmployee: React.Dispatch<React.SetStateAction<string>>;
+     isMobile: boolean;
 }
 
 const api = axios.create({

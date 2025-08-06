@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -56,11 +56,7 @@ export default function MonthlyExpensesPage() {
   const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
 
-  useEffect(() => {
-    loadExpenses();
-  }, [currentMonth, currentYear]);
-
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     try {
       setLoading(true);
       const start = startOfMonth(new Date(currentYear, currentMonth - 1, 1));
@@ -82,7 +78,11 @@ export default function MonthlyExpensesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentMonth, currentYear]);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);

@@ -30,6 +30,7 @@ interface SalaryRecordTabProps {
   employees: any[];
   selectedEmployees: string[];
   handleExport: (type: 'employees' | 'salaries' | 'advances' | 'attendances') => Promise<void>;
+     isMobile: boolean;
 }
 
 const api = axios.create({

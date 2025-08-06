@@ -105,7 +105,7 @@ const SaleInvoice: React.FC = () => {
 
   useEffect(() => {
     refreshInvoices();
-  }, []);
+  }, [refreshInvoices]); 
 
   const processedInvoices = [...invoices]
     .sort((a, b) => {

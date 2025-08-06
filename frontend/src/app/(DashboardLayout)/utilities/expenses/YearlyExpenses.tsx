@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Box, 
   Typography, 
@@ -53,11 +53,7 @@ export default function YearlyExpensesPage() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
 
-  useEffect(() => {
-    loadExpenses();
-  }, [currentYear]);
-
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     try {
       setLoading(true);
       const data = await fetchYearlyExpenses(currentYear);
@@ -91,7 +87,11 @@ export default function YearlyExpensesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentYear]);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);

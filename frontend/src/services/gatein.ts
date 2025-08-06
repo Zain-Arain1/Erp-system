@@ -17,7 +17,7 @@ export interface Item {
 
 export interface GateEntry {
   _id?: string;
-  invoiceNumber: number;
+ invoiceNumber?: number; 
   items: Item[];
   vendor: string;
   vendorId: string;
@@ -49,8 +49,9 @@ export const getGateEntry = async (id: string): Promise<GateEntry> => {
   }
 };
 
+// Updated createGateEntry with proper type for entryData
 export const createGateEntry = async (
-  entryData: Omit<GateEntry, '_id' | 'createdAt' | 'updatedAt'>
+  entryData: Omit<GateEntry, '_id' | 'createdAt' | 'updatedAt' | 'invoiceNumber'>
 ): Promise<GateEntry> => {
   try {
     // Add client-side validation
@@ -61,10 +62,8 @@ export const createGateEntry = async (
       throw new Error('At least one item is required');
     }
 
-    // Ensure invoiceNumber is not sent (let server generate it)
-    const { invoiceNumber, ...dataToSend } = entryData;
-
-    const response = await axios.post<GateEntry>(API_BASE_URL, dataToSend, {
+    // No need to remove invoiceNumber here since it's already omitted from the type
+    const response = await axios.post<GateEntry>(API_BASE_URL, entryData, {
       headers: {
         'Content-Type': 'application/json',
       },
